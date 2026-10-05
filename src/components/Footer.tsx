@@ -1,5 +1,6 @@
 import React from "react"
 import Link from "next/link"
+import Image from "next/image"
 import { Bus, MapPin, Navigation, Shield, FileText, Info, Heart } from "lucide-react"
 
 export function Footer() {
@@ -9,11 +10,14 @@ export function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-10 pb-12 border-b border-slate-800/80">
           {/* BRAND COLUMN */}
           <div className="md:col-span-1 space-y-4">
-            <Link href="/" className="inline-flex items-center gap-2 font-bold text-white text-xl tracking-tight">
-              <span className="w-7 h-7 rounded-full bg-[#1f6fe5] text-white flex items-center justify-center text-xs font-black">
-                L
-              </span>
-              <span>LOCANO</span>
+            <Link href="/" className="inline-flex items-center">
+              <Image
+                src="/locano-logo.png"
+                alt="Locano Logo"
+                width={200}
+                height={60}
+                className="h-12 w-auto object-contain brightness-0 invert"
+              />
             </Link>
             <p className="text-xs text-slate-400 leading-relaxed">
               Helping students and newcomers in Mangaluru find a city bus with ease. Search routes, check stops, and explore Karnataka&apos;s coastal educational hub.

@@ -68,11 +68,22 @@ export function AboutSection() {
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-blue-50 text-[#1f6fe5]">
               <span>About</span>
             </div>
-            <h2 className="text-4xl sm:text-5xl font-extrabold text-[#10233f] tracking-tight">
-              LOCANO
-            </h2>
-            <div className="text-xl sm:text-2xl font-bold text-[#1f6fe5]">
-              Settling made simple
+            <div className="flex items-center gap-4">
+              <Image
+                src="/locano-logo.png"
+                alt="Locano Logo"
+                width={200}
+                height={200}
+                className="w-20 h-20 sm:w-24 sm:h-24 object-contain shrink-0"
+              />
+              <div>
+                <h2 className="text-4xl sm:text-5xl font-extrabold text-[#10233f] tracking-tight">
+                  LOCANO
+                </h2>
+                <div className="text-xl sm:text-2xl font-bold text-[#1f6fe5]">
+                  Settling made simple
+                </div>
+              </div>
             </div>
             <p className="text-base sm:text-lg text-slate-600 leading-relaxed pt-2">
               LOCANO is a student-focused platform that brings together essential services to help you settle, explore and live comfortably in Mangalore.

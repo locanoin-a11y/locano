@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react"
 import Link from "next/link"
+import Image from "next/image"
 import { usePathname } from "next/navigation"
 import { useModal } from "@/context/ModalContext"
 import { Search, User, Compass } from "lucide-react"
@@ -44,22 +45,20 @@ export function Navbar() {
             : "bg-white/80 backdrop-blur-md shadow-xs"
         }`}
       >
-        {/* LOGO: On the hero, show the logo. Away from the hero, hide it. */}
-        <div
-          className={`flex items-center overflow-hidden transition-all duration-420 ease-out ${
-            onHero
-              ? "max-w-[140px] opacity-100 mr-2 sm:mr-3"
-              : "max-w-0 opacity-0 mr-0 pointer-events-none"
-          }`}
-        >
+        {/* LOGO */}
+        <div className="flex items-center mr-2 sm:mr-3">
           <Link
             href="/"
-            className="flex items-center gap-1.5 font-bold tracking-tight text-base sm:text-lg text-[#10233f] select-none group"
+            className="flex items-center select-none group"
           >
-            <span className="w-6 h-6 rounded-full bg-[#1f6fe5] text-white flex items-center justify-center text-xs shadow-xs font-black">
-              L
-            </span>
-            <span className="font-extrabold tracking-wider">LOCANO</span>
+            <Image
+              src="/locano-logo.png"
+              alt="Locano Logo"
+              width={200}
+              height={60}
+              className="h-9 sm:h-10 w-auto object-contain"
+              priority
+            />
           </Link>
         </div>
 
