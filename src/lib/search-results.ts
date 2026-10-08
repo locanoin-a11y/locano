@@ -4,7 +4,6 @@ export type ResultCard = {
   id: string
   busId: string
   number: string
-  fleet: number | null
   reversed: boolean
   minutes: number
   fromId: string
@@ -27,7 +26,6 @@ function toCard(journey: Journey, nearby: boolean): ResultCard {
     id: `${journey.bus.id}:${journey.from.id}:${journey.to.id}`,
     busId: journey.bus.id,
     number: journey.bus.number,
-    fleet: journey.bus.fleet,
     reversed: journey.reversed,
     minutes: journey.minutes,
     fromId: journey.from.id,

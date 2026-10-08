@@ -155,7 +155,7 @@ export function RoutesSection({ isFullPage = false }: { isFullPage?: boolean }) 
             </h2>
           )}
           <p className="text-sm text-slate-500 mt-1 max-w-xl">
-            Browse Mangaluru city buses, routes, key corridors, and fleet capacities.
+            Browse Mangaluru city buses, routes, and key corridors.
           </p>
         </div>
 
@@ -238,14 +238,8 @@ export function RoutesSection({ isFullPage = false }: { isFullPage?: boolean }) 
                     </div>
                   </div>
 
-                  {/* RIGHT: FLEET & ARROW */}
-                  <div className="flex items-center justify-between sm:justify-end gap-6 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
-                    <div className="text-left sm:text-right">
-                      <div className="text-[11px] text-slate-400 uppercase tracking-wider">Fleet</div>
-                      <div className="text-sm font-bold text-slate-700">
-                        {bus.fleet !== null ? `${bus.fleet} bus${bus.fleet > 1 ? "es" : ""}` : "—"}
-                      </div>
-                    </div>
+                  {/* RIGHT: ARROW */}
+                  <div className="flex items-center justify-end pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
                     <div className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 group-hover:bg-blue-50 group-hover:text-[#1f6fe5] transition-colors">
                       <ArrowRight className="w-4 h-4" />
                     </div>
