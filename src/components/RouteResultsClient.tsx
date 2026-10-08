@@ -1,25 +1,25 @@
 "use client"
 
-import React, { useState, useMemo, useEffect } from "react"
+import React, { useState, useMemo, useEffect, useRef } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import type { ResultCard } from "@/lib/search-results"
 import type { Stop } from "@/data/stops"
-import { formatMinutes, indicativeFare, formatInr } from "@/lib/format"
-import { compareBusNumbers } from "@/lib/bus-service"
+import { formatMinutes, indicativeFare } from "@/lib/format"
+import { compareBusNumbers, searchStops, resolveStop, getStop } from "@/lib/bus-service"
 import { pushRecent } from "@/lib/recent-searches"
 import { RouteMap } from "@/components/RouteMap"
-import { LocationSearch } from "@/components/LocationSearch"
 import {
-  Bus,
   ArrowRight,
   Clock,
   Navigation,
   Compass,
-  Filter,
   ArrowDownUp,
   MapPin,
   AlertCircle,
-  Sparkles,
+  Pencil,
+  Search,
+  X,
 } from "lucide-react"
 
 interface RouteResultsClientProps {
@@ -29,12 +29,39 @@ interface RouteResultsClientProps {
 }
 
 type FilterType = "All Buses" | "Direct Buses" | "Nearby Stops"
-type SortType = "time" | "number" | "fleet"
+type SortType = "time" | "number"
+
+const DEFAULT_HUBS = [
+  "state-bank",
+  "kankanady",
+  "pumpwell",
+  "jyothi",
+  "hampankatta",
+  "kadri",
+  "lalbagh",
+  "deralakatte",
+  "surathkal",
+  "car-street",
+]
+
+function getInitialSuggestions(excludeId?: string): Stop[] {
+  return DEFAULT_HUBS
+    .map((id) => getStop(id))
+    .filter((s): s is Stop => s !== undefined && s.id !== excludeId)
+    .slice(0, 8)
+}
 
 export function RouteResultsClient({ from, to, initialCards }: RouteResultsClientProps) {
+  const router = useRouter()
   const [activeFilter, setActiveFilter] = useState<FilterType>("All Buses")
   const [activeSort, setActiveSort] = useState<SortType>("time")
-  const [showEditSearch, setShowEditSearch] = useState(false)
+  const [editingField, setEditingField] = useState<"from" | "to" | null>(null)
+  const [searchText, setSearchText] = useState("")
+  const [suggestions, setSuggestions] = useState<Stop[]>([])
+  const [error, setError] = useState("")
+
+  const editContainerRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
 
   // Save to recent searches on client mount
   useEffect(() => {
@@ -44,6 +71,115 @@ export function RouteResultsClient({ from, to, initialCards }: RouteResultsClien
       href: `/transport/route/${from.id}-to-${to.id}`,
     })
   }, [from, to])
+
+  // Reset editor when route changes
+  useEffect(() => {
+    setEditingField(null)
+    setSearchText("")
+    setSuggestions([])
+    setError("")
+  }, [from.id, to.id])
+
+  // Populate initial suggestions & focus input when editingField opens
+  useEffect(() => {
+    if (editingField) {
+      setSearchText("")
+      setError("")
+      setSuggestions(getInitialSuggestions(editingField === "from" ? to.id : from.id))
+      const timer = setTimeout(() => {
+        inputRef.current?.focus()
+      }, 40)
+      return () => clearTimeout(timer)
+    }
+  }, [editingField, from.id, to.id])
+
+  // Click outside to close editor
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        editContainerRef.current &&
+        !editContainerRef.current.contains(e.target as Node)
+      ) {
+        setEditingField(null)
+      }
+    }
+    if (editingField) {
+      document.addEventListener("mousedown", handleClickOutside)
+    }
+    return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [editingField])
+
+  const toggleEdit = (field: "from" | "to") => {
+    setEditingField((prev) => (prev === field ? null : field))
+  }
+
+  const handleSearchChange = (val: string) => {
+    setSearchText(val)
+    setError("")
+    if (val.trim().length >= 1) {
+      setSuggestions(searchStops(val, 8))
+    } else {
+      setSuggestions(getInitialSuggestions(editingField === "from" ? to.id : from.id))
+    }
+  }
+
+  const handleSelectStop = (newStop: Stop) => {
+    if (editingField === "from") {
+      if (newStop.id === to.id) {
+        setError("Starting point and destination cannot be the same stop.")
+        return
+      }
+      const href = `/transport/route/${newStop.id}-to-${to.id}`
+      pushRecent({
+        id: `${newStop.id}:${to.id}`,
+        label: `${newStop.name} → ${to.name}`,
+        href,
+      })
+      setEditingField(null)
+      router.push(href)
+    } else if (editingField === "to") {
+      if (newStop.id === from.id) {
+        setError("Destination and starting point cannot be the same stop.")
+        return
+      }
+      const href = `/transport/route/${from.id}-to-${newStop.id}`
+      pushRecent({
+        id: `${from.id}:${newStop.id}`,
+        label: `${from.name} → ${newStop.name}`,
+        href,
+      })
+      setEditingField(null)
+      router.push(href)
+    }
+  }
+
+  const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      e.preventDefault()
+      if (suggestions.length > 0) {
+        const selectable = suggestions.find(
+          (s) => (editingField === "from" ? s.id !== to.id : s.id !== from.id)
+        )
+        if (selectable) {
+          handleSelectStop(selectable)
+          return
+        }
+      }
+      if (searchText.trim()) {
+        const match = resolveStop(searchText)
+        if (match.status === "match" && match.stop) {
+          handleSelectStop(match.stop)
+        } else if (match.status === "ambiguous") {
+          setError("Multiple places match this name. Pick one from the suggestions below.")
+        } else {
+          setError("Stop not found. Please choose a stop from the suggestions.")
+        }
+      }
+    } else if (e.key === "Escape") {
+      e.preventDefault()
+      setEditingField(null)
+    }
+  }
 
   const filteredAndSortedCards = useMemo(() => {
     let result = [...initialCards]
@@ -55,18 +191,13 @@ export function RouteResultsClient({ from, to, initialCards }: RouteResultsClien
       result = result.filter((card) => card.nearby)
     }
 
-    // Sorts: time, number, fleet
+    // Sorts: time, number
     result.sort((a, b) => {
       if (activeSort === "time") {
         return a.minutes - b.minutes || compareBusNumbers(a.number, b.number)
       }
       if (activeSort === "number") {
         return compareBusNumbers(a.number, b.number)
-      }
-      if (activeSort === "fleet") {
-        const fleetA = a.fleet ?? -1
-        const fleetB = b.fleet ?? -1
-        return fleetB - fleetA || a.minutes - b.minutes
       }
       return 0
     })
@@ -81,35 +212,193 @@ export function RouteResultsClient({ from, to, initialCards }: RouteResultsClien
     <div className="space-y-8">
       {/* ROUTE HEADER CARD */}
       <div className="p-6 sm:p-8 bg-white rounded-3xl border border-slate-100 locano-card">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-6 border-b border-slate-100">
-          <div>
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-blue-50 text-[#1f6fe5] mb-2">
-              <Compass className="w-3.5 h-3.5" />
-              <span>Route Search Results</span>
-            </div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-[#10233f] tracking-tight flex items-center gap-3 flex-wrap">
-              <span>{from.name}</span>
-              <ArrowRight className="w-5 h-5 text-slate-400" />
-              <span>{to.name}</span>
-            </h1>
-            <p className="text-xs text-slate-500 mt-1">
-              Found {initialCards.length} connection{initialCards.length === 1 ? "" : "s"} ({directCount} direct, {nearbyCount} nearby alternatives).
-            </p>
+        <div className="pb-6 border-b border-slate-100">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-blue-50 text-[#1f6fe5] mb-2">
+            <Compass className="w-3.5 h-3.5" />
+            <span>Route Search Results</span>
           </div>
 
-          <button
-            type="button"
-            onClick={() => setShowEditSearch(!showEditSearch)}
-            className="px-4 py-2 rounded-full border border-slate-200 text-xs font-semibold text-slate-700 hover:text-[#1f6fe5] hover:border-blue-300 transition-colors self-start md:self-auto"
-          >
-            {showEditSearch ? "Hide Search Bar" : "Change Stops"}
-          </button>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-[#10233f] tracking-tight flex items-center gap-2 sm:gap-3 flex-wrap">
+            {/* FROM BUTTON */}
+            <button
+              type="button"
+              onClick={() => toggleEdit("from")}
+              aria-expanded={editingField === "from"}
+              title={`Click to change starting stop (${from.name})`}
+              className={`group inline-flex items-center gap-2 px-3 py-1.5 -ml-3 rounded-2xl cursor-pointer transition-all text-left ${
+                editingField === "from"
+                  ? "text-[#1f6fe5] bg-blue-50 ring-2 ring-[#1f6fe5]/30 shadow-xs"
+                  : "text-[#10233f] hover:text-[#1f6fe5] hover:bg-slate-100/80"
+              } focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1f6fe5] focus-visible:ring-offset-2`}
+            >
+              <span className="underline decoration-dotted decoration-slate-300 underline-offset-8 group-hover:decoration-[#1f6fe5]/60 transition-colors">
+                {from.name}
+              </span>
+              <Pencil className="w-3.5 h-3.5 text-slate-400 group-hover:text-[#1f6fe5] opacity-60 group-hover:opacity-100 transition-all shrink-0" />
+            </button>
+
+            <ArrowRight className="w-5 h-5 text-slate-300 shrink-0" aria-hidden="true" />
+
+            {/* TO BUTTON */}
+            <button
+              type="button"
+              onClick={() => toggleEdit("to")}
+              aria-expanded={editingField === "to"}
+              title={`Click to change destination (${to.name})`}
+              className={`group inline-flex items-center gap-2 px-3 py-1.5 rounded-2xl cursor-pointer transition-all text-left ${
+                editingField === "to"
+                  ? "text-[#1f6fe5] bg-blue-50 ring-2 ring-[#1f6fe5]/30 shadow-xs"
+                  : "text-[#10233f] hover:text-[#1f6fe5] hover:bg-slate-100/80"
+              } focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1f6fe5] focus-visible:ring-offset-2`}
+            >
+              <span className="underline decoration-dotted decoration-slate-300 underline-offset-8 group-hover:decoration-[#1f6fe5]/60 transition-colors">
+                {to.name}
+              </span>
+              <Pencil className="w-3.5 h-3.5 text-slate-400 group-hover:text-[#1f6fe5] opacity-60 group-hover:opacity-100 transition-all shrink-0" />
+            </button>
+          </h1>
+
+          <p className="text-xs text-slate-500 mt-2">
+            Found {initialCards.length} connection{initialCards.length === 1 ? "" : "s"} ({directCount} direct, {nearbyCount} nearby alternatives).
+          </p>
         </div>
 
-        {/* EDIT SEARCH ACCORDION */}
-        {showEditSearch && (
-          <div className="pt-5 pb-2">
-            <LocationSearch showRecents={false} onSuccess={() => setShowEditSearch(false)} />
+        {/* SINGLE LOCATION SELECTOR (WHEN EDITING FROM OR TO) */}
+        {editingField && (
+          <div ref={editContainerRef} className="pt-5 pb-2 animate-entrance">
+            <div className="p-4 sm:p-5 bg-blue-50/40 rounded-2xl border border-blue-100/80 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-xs font-bold">
+                  {editingField === "from" ? (
+                    <>
+                      <div className="w-6 h-6 rounded-lg bg-blue-100 flex items-center justify-center text-[#1f6fe5]">
+                        <MapPin className="w-3.5 h-3.5" />
+                      </div>
+                      <span className="text-[#10233f]">Change Starting Point</span>
+                      <span className="text-slate-500 font-medium text-[11px] hidden sm:inline">
+                        · Destination remains: <strong className="text-slate-700">{to.name}</strong>
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <div className="w-6 h-6 rounded-lg bg-emerald-100 flex items-center justify-center text-emerald-600">
+                        <Navigation className="w-3.5 h-3.5" />
+                      </div>
+                      <span className="text-[#10233f]">Change Destination</span>
+                      <span className="text-slate-500 font-medium text-[11px] hidden sm:inline">
+                        · Starting point remains: <strong className="text-slate-700">{from.name}</strong>
+                      </span>
+                    </>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setEditingField(null)}
+                  className="px-2.5 py-1 rounded-full text-xs font-semibold text-slate-500 hover:text-slate-800 hover:bg-slate-200/50 transition-colors flex items-center gap-1 cursor-pointer"
+                  aria-label="Cancel editing"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  <span>Cancel</span>
+                </button>
+              </div>
+
+              {/* SEARCH INPUT */}
+              <div className="relative">
+                <div className="flex items-center px-4 py-3 bg-white rounded-xl border border-slate-200 shadow-xs focus-within:border-[#1f6fe5] focus-within:ring-2 focus-within:ring-blue-100 transition-all">
+                  <Search className="w-4 h-4 text-slate-400 shrink-0 mr-2.5" />
+                  <input
+                    ref={inputRef}
+                    type="text"
+                    placeholder={
+                      editingField === "from"
+                        ? `Search new starting stop (replacing ${from.name})...`
+                        : `Search new destination stop (replacing ${to.name})...`
+                    }
+                    value={searchText}
+                    onChange={(e) => handleSearchChange(e.target.value)}
+                    onKeyDown={handleInputKeyDown}
+                    className="w-full text-sm text-[#10233f] placeholder-slate-400 bg-transparent focus:outline-none"
+                    aria-label={editingField === "from" ? "New starting stop" : "New destination stop"}
+                  />
+                  {searchText && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSearchText("")
+                        setSuggestions(getInitialSuggestions(editingField === "from" ? to.id : from.id))
+                      }}
+                      className="text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
+                      aria-label="Clear text"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                {error && (
+                  <div className="flex items-center gap-1.5 text-xs text-rose-600 mt-2 px-1">
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                    <span>{error}</span>
+                  </div>
+                )}
+
+                {/* SUGGESTIONS LIST */}
+                {suggestions.length > 0 ? (
+                  <div className="mt-2 bg-white rounded-2xl shadow-lg border border-slate-100 py-1.5 max-h-60 overflow-y-auto">
+                    <div className="px-3.5 py-1 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                      {searchText.trim() ? "Matching Stops" : "Popular Stops"}
+                    </div>
+                    {suggestions.map((stop) => {
+                      const isOther =
+                        editingField === "from" ? stop.id === to.id : stop.id === from.id
+                      const isCurrent =
+                        editingField === "from" ? stop.id === from.id : stop.id === to.id
+
+                      return (
+                        <button
+                          key={stop.id}
+                          type="button"
+                          disabled={isOther}
+                          onClick={() => handleSelectStop(stop)}
+                          className={`w-full px-4 py-2.5 text-left flex items-center justify-between text-sm transition-colors ${
+                            isOther
+                              ? "opacity-40 cursor-not-allowed bg-slate-50"
+                              : "hover:bg-blue-50 focus:bg-blue-50 focus:outline-none cursor-pointer"
+                          }`}
+                        >
+                          <div>
+                            <span className="font-semibold text-[#10233f]">{stop.name}</span>
+                            {stop.area && stop.area !== stop.name && (
+                              <span className="text-xs text-slate-400 ml-2">({stop.area})</span>
+                            )}
+                            {isCurrent && (
+                              <span className="ml-2 text-[10px] font-medium text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
+                                Current
+                              </span>
+                            )}
+                            {isOther && (
+                              <span className="ml-2 text-[10px] font-medium text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">
+                                Already {editingField === "from" ? "destination" : "origin"}
+                              </span>
+                            )}
+                          </div>
+                          {stop.landmark && (
+                            <span className="text-xs text-slate-400 hidden sm:inline">{stop.landmark}</span>
+                          )}
+                        </button>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  searchText.trim().length > 0 && (
+                    <div className="mt-2 p-3 bg-white rounded-xl border border-slate-100 text-xs text-slate-400 text-center">
+                      No stops found matching &quot;{searchText}&quot;. Pick from suggestions or try another search.
+                    </div>
+                  )
+                )}
+              </div>
+            </div>
           </div>
         )}
 
@@ -162,7 +451,6 @@ export function RouteResultsClient({ from, to, initialCards }: RouteResultsClien
             >
               <option value="time">Travel Time (Fastest)</option>
               <option value="number">Bus Number</option>
-              <option value="fleet">Fleet Capacity</option>
             </select>
           </div>
         </div>
@@ -225,9 +513,6 @@ export function RouteResultsClient({ from, to, initialCards }: RouteResultsClien
                       <div className="text-base font-extrabold text-[#10233f] flex items-center gap-1 justify-start sm:justify-end">
                         <Clock className="w-3.5 h-3.5 text-[#1f6fe5]" />
                         <span>{formatMinutes(card.minutes)}</span>
-                      </div>
-                      <div className="text-[11px] text-slate-400 mt-0.5">
-                        Fleet: {card.fleet !== null ? `${card.fleet}` : "—"}
                       </div>
                     </div>
 
