@@ -51,14 +51,26 @@ function getInitialSuggestions(excludeId?: string): Stop[] {
     .slice(0, 8)
 }
 
+function getDefaultFilter(cards: ResultCard[]): FilterType {
+  const hasDirect = cards.some((card) => !card.nearby)
+  return hasDirect ? "Direct Buses" : "Nearby Stops"
+}
+
 export function RouteResultsClient({ from, to, initialCards }: RouteResultsClientProps) {
   const router = useRouter()
-  const [activeFilter, setActiveFilter] = useState<FilterType>("All Buses")
+  const routeKey = `${from.id}:${to.id}`
+  const [prevRouteKey, setPrevRouteKey] = useState(routeKey)
+  const [activeFilter, setActiveFilter] = useState<FilterType>(() => getDefaultFilter(initialCards))
   const [activeSort, setActiveSort] = useState<SortType>("time")
   const [editingField, setEditingField] = useState<"from" | "to" | null>(null)
   const [searchText, setSearchText] = useState("")
   const [suggestions, setSuggestions] = useState<Stop[]>([])
   const [error, setError] = useState("")
+
+  if (prevRouteKey !== routeKey) {
+    setPrevRouteKey(routeKey)
+    setActiveFilter(getDefaultFilter(initialCards))
+  }
 
   const editContainerRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -72,13 +84,14 @@ export function RouteResultsClient({ from, to, initialCards }: RouteResultsClien
     })
   }, [from, to])
 
-  // Reset editor when route changes
+  // Reset editor and filter when route changes
   useEffect(() => {
+    setActiveFilter(getDefaultFilter(initialCards))
     setEditingField(null)
     setSearchText("")
     setSuggestions([])
     setError("")
-  }, [from.id, to.id])
+  }, [from.id, to.id, initialCards])
 
   // Populate initial suggestions & focus input when editingField opens
   useEffect(() => {
@@ -259,7 +272,7 @@ export function RouteResultsClient({ from, to, initialCards }: RouteResultsClien
           </h1>
 
           <p className="text-xs text-slate-500 mt-2">
-            Found {initialCards.length} connection{initialCards.length === 1 ? "" : "s"} ({directCount} direct, {nearbyCount} nearby alternatives).
+            Found {filteredAndSortedCards.length} connection{filteredAndSortedCards.length === 1 ? "" : "s"} ({directCount} direct, {nearbyCount} nearby alternatives).
           </p>
         </div>
 
