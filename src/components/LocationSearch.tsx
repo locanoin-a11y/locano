@@ -176,7 +176,7 @@ export function LocationSearch({ onSuccess, showRecents = true, className = "" }
                     setShowFromSuggestions(true)
                   }
                 }}
-                className="w-full text-sm text-[#10233f] placeholder-slate-400 bg-transparent focus:outline-none"
+                className="w-full text-base sm:text-sm text-[#10233f] placeholder-slate-400 bg-transparent focus:outline-none"
               />
               {fromText && (
                 <button
@@ -246,7 +246,7 @@ export function LocationSearch({ onSuccess, showRecents = true, className = "" }
                     setShowToSuggestions(true)
                   }
                 }}
-                className="w-full text-sm text-[#10233f] placeholder-slate-400 bg-transparent focus:outline-none"
+                className="w-full text-base sm:text-sm text-[#10233f] placeholder-slate-400 bg-transparent focus:outline-none"
               />
               {toText && (
                 <button
