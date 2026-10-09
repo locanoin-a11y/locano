@@ -3,10 +3,10 @@
 import React, { useState, useMemo, useEffect, useRef } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import type { ResultCard } from "@/lib/search-results"
 import type { Stop } from "@/data/stops"
 import { formatMinutes, indicativeFare } from "@/lib/format"
-import { compareBusNumbers, searchStops, resolveStop, getStop } from "@/lib/bus-service"
+import { compareBusNumbers, searchStops, resolveStop, getStop, parseRouteSlug } from "@/lib/bus-service"
+import { resultCards, type ResultCard } from "@/lib/search-results"
 import { pushRecent } from "@/lib/recent-searches"
 import { RouteMap } from "@/components/RouteMap"
 import {
@@ -15,6 +15,7 @@ import {
   Navigation,
   Compass,
   ArrowDownUp,
+  ArrowUpDown,
   MapPin,
   AlertCircle,
   Pencil,
@@ -58,8 +59,8 @@ function getDefaultFilter(cards: ResultCard[]): FilterType {
 
 export function RouteResultsClient({ from, to, initialCards }: RouteResultsClientProps) {
   const router = useRouter()
-  const routeKey = `${from.id}:${to.id}`
-  const [prevRouteKey, setPrevRouteKey] = useState(routeKey)
+  const [currentFrom, setCurrentFrom] = useState(from)
+  const [currentTo, setCurrentTo] = useState(to)
   const [activeFilter, setActiveFilter] = useState<FilterType>(() => getDefaultFilter(initialCards))
   const [activeSort, setActiveSort] = useState<SortType>("time")
   const [editingField, setEditingField] = useState<"from" | "to" | null>(null)
@@ -67,10 +68,23 @@ export function RouteResultsClient({ from, to, initialCards }: RouteResultsClien
   const [suggestions, setSuggestions] = useState<Stop[]>([])
   const [error, setError] = useState("")
 
-  if (prevRouteKey !== routeKey) {
-    setPrevRouteKey(routeKey)
+  // Synchronize state if props change from outside (e.g. navigation)
+  const propKey = `${from.id}:${to.id}`
+  const [prevPropKey, setPrevPropKey] = useState(propKey)
+  if (prevPropKey !== propKey) {
+    setPrevPropKey(propKey)
+    setCurrentFrom(from)
+    setCurrentTo(to)
     setActiveFilter(getDefaultFilter(initialCards))
   }
+
+  // Recalculate results for current origin/destination, reusing initialCards for original journey
+  const currentCards = useMemo(() => {
+    if (currentFrom.id === from.id && currentTo.id === to.id) {
+      return initialCards
+    }
+    return resultCards(currentFrom.id, currentTo.id)
+  }, [currentFrom.id, currentTo.id, from.id, to.id, initialCards])
 
   const editContainerRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -84,7 +98,7 @@ export function RouteResultsClient({ from, to, initialCards }: RouteResultsClien
     })
   }, [from, to])
 
-  // Reset editor and filter when route changes
+  // Reset editor and filter when route props change
   useEffect(() => {
     setActiveFilter(getDefaultFilter(initialCards))
     setEditingField(null)
@@ -93,18 +107,54 @@ export function RouteResultsClient({ from, to, initialCards }: RouteResultsClien
     setError("")
   }, [from.id, to.id, initialCards])
 
+  // Listen to popstate for browser Back/Forward navigation
+  useEffect(() => {
+    const handlePopState = () => {
+      const match = window.location.pathname.match(/\/transport\/route\/(.+)$/)
+      if (match && match[1]) {
+        const parsed = parseRouteSlug(match[1])
+        if (parsed) {
+          setCurrentFrom(parsed.from)
+          setCurrentTo(parsed.to)
+        }
+      }
+    }
+    window.addEventListener("popstate", handlePopState)
+    return () => window.removeEventListener("popstate", handlePopState)
+  }, [])
+
+  // Swap starting point and destination
+  const handleSwap = () => {
+    const nextFrom = currentTo
+    const nextTo = currentFrom
+    setCurrentFrom(nextFrom)
+    setCurrentTo(nextTo)
+    setEditingField(null)
+    setSearchText("")
+    setSuggestions([])
+    setError("")
+
+    const nextHref = `/transport/route/${nextFrom.id}-to-${nextTo.id}`
+    pushRecent({
+      id: `${nextFrom.id}:${nextTo.id}`,
+      label: `${nextFrom.name} → ${nextTo.name}`,
+      href: nextHref,
+    })
+    window.history.pushState(null, "", nextHref)
+  }
+
   // Populate initial suggestions & focus input when editingField opens
   useEffect(() => {
     if (editingField) {
       setSearchText("")
       setError("")
-      setSuggestions(getInitialSuggestions(editingField === "from" ? to.id : from.id))
+      setSuggestions(getInitialSuggestions(editingField === "from" ? currentTo.id : currentFrom.id))
       const timer = setTimeout(() => {
         inputRef.current?.focus()
       }, 40)
       return () => clearTimeout(timer)
     }
-  }, [editingField, from.id, to.id])
+  }, [editingField, currentFrom.id, currentTo.id])
 
   // Click outside to close editor
   useEffect(() => {
@@ -132,36 +182,38 @@ export function RouteResultsClient({ from, to, initialCards }: RouteResultsClien
     if (val.trim().length >= 1) {
       setSuggestions(searchStops(val, 8))
     } else {
-      setSuggestions(getInitialSuggestions(editingField === "from" ? to.id : from.id))
+      setSuggestions(getInitialSuggestions(editingField === "from" ? currentTo.id : currentFrom.id))
     }
   }
 
   const handleSelectStop = (newStop: Stop) => {
     if (editingField === "from") {
-      if (newStop.id === to.id) {
+      if (newStop.id === currentTo.id) {
         setError("Starting point and destination cannot be the same stop.")
         return
       }
-      const href = `/transport/route/${newStop.id}-to-${to.id}`
+      const href = `/transport/route/${newStop.id}-to-${currentTo.id}`
       pushRecent({
-        id: `${newStop.id}:${to.id}`,
-        label: `${newStop.name} → ${to.name}`,
+        id: `${newStop.id}:${currentTo.id}`,
+        label: `${newStop.name} → ${currentTo.name}`,
         href,
       })
       setEditingField(null)
+      setCurrentFrom(newStop)
       router.push(href)
     } else if (editingField === "to") {
-      if (newStop.id === from.id) {
+      if (newStop.id === currentFrom.id) {
         setError("Destination and starting point cannot be the same stop.")
         return
       }
-      const href = `/transport/route/${from.id}-to-${newStop.id}`
+      const href = `/transport/route/${currentFrom.id}-to-${newStop.id}`
       pushRecent({
-        id: `${from.id}:${newStop.id}`,
-        label: `${from.name} → ${newStop.name}`,
+        id: `${currentFrom.id}:${newStop.id}`,
+        label: `${currentFrom.name} → ${newStop.name}`,
         href,
       })
       setEditingField(null)
+      setCurrentTo(newStop)
       router.push(href)
     }
   }
@@ -171,7 +223,7 @@ export function RouteResultsClient({ from, to, initialCards }: RouteResultsClien
       e.preventDefault()
       if (suggestions.length > 0) {
         const selectable = suggestions.find(
-          (s) => (editingField === "from" ? s.id !== to.id : s.id !== from.id)
+          (s) => (editingField === "from" ? s.id !== currentTo.id : s.id !== currentFrom.id)
         )
         if (selectable) {
           handleSelectStop(selectable)
@@ -195,7 +247,7 @@ export function RouteResultsClient({ from, to, initialCards }: RouteResultsClien
   }
 
   const filteredAndSortedCards = useMemo(() => {
-    let result = [...initialCards]
+    let result = [...currentCards]
 
     // Filters: All Buses, Direct Buses, Nearby Stops
     if (activeFilter === "Direct Buses") {
@@ -216,10 +268,10 @@ export function RouteResultsClient({ from, to, initialCards }: RouteResultsClien
     })
 
     return result
-  }, [initialCards, activeFilter, activeSort])
+  }, [currentCards, activeFilter, activeSort])
 
-  const directCount = initialCards.filter((c) => !c.nearby).length
-  const nearbyCount = initialCards.filter((c) => c.nearby).length
+  const directCount = currentCards.filter((c) => !c.nearby).length
+  const nearbyCount = currentCards.filter((c) => c.nearby).length
 
   return (
     <div className="space-y-8">
@@ -237,7 +289,7 @@ export function RouteResultsClient({ from, to, initialCards }: RouteResultsClien
               type="button"
               onClick={() => toggleEdit("from")}
               aria-expanded={editingField === "from"}
-              title={`Click to change starting stop (${from.name})`}
+              title={`Click to change starting stop (${currentFrom.name})`}
               className={`group inline-flex items-center gap-2 px-3 py-1.5 -ml-3 rounded-2xl cursor-pointer transition-all text-left ${
                 editingField === "from"
                   ? "text-[#1f6fe5] bg-blue-50 ring-2 ring-[#1f6fe5]/30 shadow-xs"
@@ -245,19 +297,31 @@ export function RouteResultsClient({ from, to, initialCards }: RouteResultsClien
               } focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1f6fe5] focus-visible:ring-offset-2`}
             >
               <span className="underline decoration-dotted decoration-slate-300 underline-offset-8 group-hover:decoration-[#1f6fe5]/60 transition-colors">
-                {from.name}
+                {currentFrom.name}
               </span>
               <Pencil className="w-3.5 h-3.5 text-slate-400 group-hover:text-[#1f6fe5] opacity-60 group-hover:opacity-100 transition-all shrink-0" />
             </button>
 
-            <ArrowRight className="w-5 h-5 text-slate-300 shrink-0" aria-hidden="true" />
+            {/* ARROW & SWAP BUTTON */}
+            <span className="inline-flex items-center gap-1 sm:gap-1.5 shrink-0">
+              <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 text-slate-300 shrink-0" aria-hidden="true" />
+              <button
+                type="button"
+                onClick={handleSwap}
+                aria-label="Swap starting point and destination"
+                title="Swap starting point and destination"
+                className="group/swap p-1.5 sm:p-2 rounded-xl bg-slate-50 hover:bg-blue-50 border border-slate-200/80 hover:border-blue-200 text-slate-500 hover:text-[#1f6fe5] transition-all cursor-pointer shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1f6fe5] focus-visible:ring-offset-2 shrink-0"
+              >
+                <ArrowUpDown className="w-3.5 h-3.5 sm:w-4 sm:h-4 group-hover/swap:rotate-180 transition-transform duration-300" aria-hidden="true" />
+              </button>
+            </span>
 
             {/* TO BUTTON */}
             <button
               type="button"
               onClick={() => toggleEdit("to")}
               aria-expanded={editingField === "to"}
-              title={`Click to change destination (${to.name})`}
+              title={`Click to change destination (${currentTo.name})`}
               className={`group inline-flex items-center gap-2 px-3 py-1.5 rounded-2xl cursor-pointer transition-all text-left ${
                 editingField === "to"
                   ? "text-[#1f6fe5] bg-blue-50 ring-2 ring-[#1f6fe5]/30 shadow-xs"
@@ -265,7 +329,7 @@ export function RouteResultsClient({ from, to, initialCards }: RouteResultsClien
               } focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1f6fe5] focus-visible:ring-offset-2`}
             >
               <span className="underline decoration-dotted decoration-slate-300 underline-offset-8 group-hover:decoration-[#1f6fe5]/60 transition-colors">
-                {to.name}
+                {currentTo.name}
               </span>
               <Pencil className="w-3.5 h-3.5 text-slate-400 group-hover:text-[#1f6fe5] opacity-60 group-hover:opacity-100 transition-all shrink-0" />
             </button>
@@ -289,7 +353,7 @@ export function RouteResultsClient({ from, to, initialCards }: RouteResultsClien
                       </div>
                       <span className="text-[#10233f]">Change Starting Point</span>
                       <span className="text-slate-500 font-medium text-[11px] hidden sm:inline">
-                        · Destination remains: <strong className="text-slate-700">{to.name}</strong>
+                        · Destination remains: <strong className="text-slate-700">{currentTo.name}</strong>
                       </span>
                     </>
                   ) : (
@@ -299,7 +363,7 @@ export function RouteResultsClient({ from, to, initialCards }: RouteResultsClien
                       </div>
                       <span className="text-[#10233f]">Change Destination</span>
                       <span className="text-slate-500 font-medium text-[11px] hidden sm:inline">
-                        · Starting point remains: <strong className="text-slate-700">{from.name}</strong>
+                        · Starting point remains: <strong className="text-slate-700">{currentFrom.name}</strong>
                       </span>
                     </>
                   )}
@@ -325,8 +389,8 @@ export function RouteResultsClient({ from, to, initialCards }: RouteResultsClien
                     type="text"
                     placeholder={
                       editingField === "from"
-                        ? `Search new starting stop (replacing ${from.name})...`
-                        : `Search new destination stop (replacing ${to.name})...`
+                        ? `Search new starting stop (replacing ${currentFrom.name})...`
+                        : `Search new destination stop (replacing ${currentTo.name})...`
                     }
                     value={searchText}
                     onChange={(e) => handleSearchChange(e.target.value)}
@@ -339,7 +403,7 @@ export function RouteResultsClient({ from, to, initialCards }: RouteResultsClien
                       type="button"
                       onClick={() => {
                         setSearchText("")
-                        setSuggestions(getInitialSuggestions(editingField === "from" ? to.id : from.id))
+                        setSuggestions(getInitialSuggestions(editingField === "from" ? currentTo.id : currentFrom.id))
                       }}
                       className="text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
                       aria-label="Clear text"
@@ -364,9 +428,9 @@ export function RouteResultsClient({ from, to, initialCards }: RouteResultsClien
                     </div>
                     {suggestions.map((stop) => {
                       const isOther =
-                        editingField === "from" ? stop.id === to.id : stop.id === from.id
+                        editingField === "from" ? stop.id === currentTo.id : stop.id === currentFrom.id
                       const isCurrent =
-                        editingField === "from" ? stop.id === from.id : stop.id === to.id
+                        editingField === "from" ? stop.id === currentFrom.id : stop.id === currentTo.id
 
                       return (
                         <button
@@ -427,7 +491,7 @@ export function RouteResultsClient({ from, to, initialCards }: RouteResultsClien
                   : "hover:text-slate-900"
               }`}
             >
-              All Buses ({initialCards.length})
+              All Buses ({currentCards.length})
             </button>
             <button
               onClick={() => setActiveFilter("Direct Buses")}
@@ -552,10 +616,10 @@ export function RouteResultsClient({ from, to, initialCards }: RouteResultsClien
         {/* MAP DISPLAY (RIGHT 5 COLS) */}
         <div className="lg:col-span-5 sticky top-28 space-y-4">
           <div className="bg-white rounded-3xl p-4 border border-slate-100 locano-card h-[460px] overflow-hidden">
-            <RouteMap stops={[from, to]} fromId={from.id} toId={to.id} />
+            <RouteMap stops={[currentFrom, currentTo]} fromId={currentFrom.id} toId={currentTo.id} />
           </div>
           <div className="text-center text-xs text-slate-400">
-            A: {from.name} · B: {to.name}
+            A: {currentFrom.name} · B: {currentTo.name}
           </div>
         </div>
       </div>
