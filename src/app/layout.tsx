@@ -6,6 +6,7 @@ import { Navbar } from "@/components/Navbar"
 import { Footer } from "@/components/Footer"
 import { SearchModal } from "@/components/SearchModal"
 import { AccountModal } from "@/components/AccountModal"
+import { WhatsAppBubble } from "@/components/WhatsAppBubble"
 
 const outfit = Outfit({
   subsets: ["latin"],
@@ -42,6 +43,7 @@ export default function RootLayout({
           <Footer />
           <SearchModal />
           <AccountModal />
+          <WhatsAppBubble />
         </ModalProvider>
       </body>
     </html>
