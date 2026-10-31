@@ -37,6 +37,7 @@ type FilterGender = "All" | GenderPreference
 
 const POPULAR_AREAS = [
   "All Areas",
+  "Valencia",
   "Balmatta",
   "Deralakatte",
   "Jeppu",
@@ -123,6 +124,15 @@ function AccommodationContent() {
   const setGenderFilter = (val: FilterGender) => setCustomGender(val)
 
   const [rawListings, setRawListings] = useState<AccommodationListing[]>([])
+
+  const customSuggestions = useMemo(() => {
+    const list = new Set<string>()
+    rawListings.forEach((item) => {
+      if (item.area) list.add(item.area)
+      if (item.name) list.add(item.name)
+    })
+    return Array.from(list)
+  }, [rawListings])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -266,8 +276,9 @@ function AccommodationContent() {
             <LocationSearchInput
               value={locationQuery}
               onChange={setLocationQuery}
-              placeholder="e.g. Balmatta, Deralakatte..."
+              placeholder="e.g. Valencia, Balmatta, Deralakatte..."
               accentColor="blue"
+              customSuggestions={customSuggestions}
             />
 
             {/* Field 2: PG Type */}
