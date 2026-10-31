@@ -25,9 +25,29 @@ export async function generateMetadata({
   const { id } = await params
   const listing = await fetchAccommodationById(id)
   if (!listing) return { title: "Accommodation Not Found" }
+  const title = `${listing.name} · ${listing.area}`
+  const description = `${listing.tagline} — ${listing.gender} ${listing.type} in ${listing.area}, Mangaluru.`
   return {
-    title: `${listing.name} · ${listing.area}`,
-    description: `${listing.tagline} — ${listing.gender} ${listing.type} in ${listing.area}, Mangaluru.`,
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      url: `https://locano.in/accommodation/${id}`,
+      type: "website",
+      images: listing.images?.[0]
+        ? [{ url: listing.images[0], alt: listing.name }]
+        : undefined,
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: listing.images?.[0] ? [listing.images[0]] : undefined,
+    },
+    alternates: {
+      canonical: `https://locano.in/accommodation/${id}`,
+    },
   }
 }
 

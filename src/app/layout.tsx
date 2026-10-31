@@ -7,6 +7,7 @@ import { Footer } from "@/components/Footer"
 import { SearchModal } from "@/components/SearchModal"
 import { AccountModal } from "@/components/AccountModal"
 import { WhatsAppBubble } from "@/components/WhatsAppBubble"
+import { OrganizationJsonLd, WebsiteJsonLd } from "@/components/JsonLd"
 
 const outfit = Outfit({
   subsets: ["latin"],
@@ -21,12 +22,67 @@ const fraunces = Fraunces({
 })
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://locano.in"),
   title: {
-    default: "LOCANO - settling made simple",
+    default: "LOCANO – Settling Made Simple | PG, Mess & Transport in Mangaluru",
     template: "%s · LOCANO",
   },
   description:
-    "Search bus routes, bus numbers and real-time updates in Mangaluru in seconds. Find your bus and reach anywhere in Mangalore.",
+    "Find PG accommodations, student mess & food services, bus routes and transport in Mangaluru. LOCANO makes settling in a new city simple for students.",
+  keywords: [
+    "Mangaluru PG",
+    "Mangalore PG",
+    "student accommodation Mangaluru",
+    "mess food Mangaluru",
+    "bus routes Mangalore",
+    "paying guest Mangalore",
+    "student mess near me",
+    "PG near Sahyadri College",
+    "PG near Yenepoya",
+    "LOCANO",
+  ],
+  authors: [{ name: "LOCANO", url: "https://locano.in" }],
+  creator: "LOCANO",
+  publisher: "LOCANO",
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-video-preview": -1,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+    },
+  },
+  openGraph: {
+    type: "website",
+    locale: "en_IN",
+    url: "https://locano.in",
+    siteName: "LOCANO",
+    title: "LOCANO – Settling Made Simple | PG, Mess & Transport in Mangaluru",
+    description:
+      "Find PG accommodations, student mess & food services, bus routes and transport in Mangaluru. LOCANO makes settling in a new city simple.",
+    images: [
+      {
+        url: "/locano-logo.png",
+        width: 512,
+        height: 512,
+        alt: "LOCANO Logo",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "LOCANO – Settling Made Simple",
+    description:
+      "PG, Mess & Transport in Mangaluru — everything a student needs to settle in.",
+    images: ["/locano-logo.png"],
+  },
+  alternates: {
+    canonical: "https://locano.in",
+  },
+  category: "Education",
 }
 
 export default function RootLayout({
@@ -37,6 +93,8 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${outfit.variable} ${fraunces.variable}`}>
       <body className="min-h-screen flex flex-col bg-white text-[#10233f] font-sans antialiased">
+        <OrganizationJsonLd />
+        <WebsiteJsonLd />
         <ModalProvider>
           <Navbar />
           <main className="flex-1">{children}</main>
