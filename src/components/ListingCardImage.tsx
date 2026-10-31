@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect } from "react"
+import React, { useState } from "react"
 import Image, { ImageProps } from "next/image"
 
 export interface ListingCardImageProps extends Omit<ImageProps, "onError"> {
@@ -14,12 +14,16 @@ export function ListingCardImage({
   unoptimized,
   ...props
 }: ListingCardImageProps) {
-  const [currentSrc, setCurrentSrc] = useState(src)
+  const [hasError, setHasError] = useState(false)
+  const [prevSrc, setPrevSrc] = useState(src)
 
-  useEffect(() => {
-    setCurrentSrc(src)
-  }, [src])
+  // Adjust state during render when prop changes, avoiding cascading effect renders
+  if (prevSrc !== src) {
+    setPrevSrc(src)
+    setHasError(false)
+  }
 
+  const currentSrc = hasError ? fallbackSrc : src
   const isHttp = typeof currentSrc === "string" && currentSrc.startsWith("http")
 
   return (
@@ -29,9 +33,7 @@ export function ListingCardImage({
       alt={alt}
       unoptimized={unoptimized ?? isHttp}
       onError={() => {
-        if (currentSrc !== fallbackSrc) {
-          setCurrentSrc(fallbackSrc)
-        }
+        setHasError(true)
       }}
     />
   )

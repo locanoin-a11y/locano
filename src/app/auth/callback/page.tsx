@@ -4,6 +4,14 @@ import { useEffect, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { getSupabaseBrowserClient } from "@/lib/supabase/client"
 
+type EmailOtpType =
+  | "recovery"
+  | "signup"
+  | "invite"
+  | "magiclink"
+  | "email_change"
+  | "email"
+
 function CallbackContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -13,7 +21,19 @@ function CallbackContent() {
       const code = searchParams.get("code")
       const next = searchParams.get("next")
       const type = searchParams.get("type")
+      const tokenHash = searchParams.get("token_hash")
       const supabase = getSupabaseBrowserClient()
+
+      // If this is a password recovery link landing on callback, forward directly
+      // to /auth/reset-password with all token parameters intact
+      if (type === "recovery") {
+        const params = new URLSearchParams()
+        if (tokenHash) params.set("token_hash", tokenHash)
+        if (code) params.set("code", code)
+        params.set("type", "recovery")
+        router.replace(`/auth/reset-password?${params.toString()}`)
+        return
+      }
 
       if (code && supabase) {
         try {
@@ -23,13 +43,19 @@ function CallbackContent() {
         }
       }
 
-      if (next) {
-        router.replace(next)
-        return
+      if (tokenHash && supabase && type) {
+        try {
+          await supabase.auth.verifyOtp({
+            token_hash: tokenHash,
+            type: type as EmailOtpType,
+          })
+        } catch {
+          // If verifyOtp fails or was already exchanged, continue
+        }
       }
 
-      if (type === "recovery") {
-        router.replace("/auth/reset-password")
+      if (next) {
+        router.replace(next)
         return
       }
 

@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect, Suspense } from "react"
+import React, { useState, useEffect, useRef, Suspense } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import {
@@ -13,9 +13,18 @@ import {
   ArrowRight,
   ShieldCheck,
   LogIn,
+  Mail,
 } from "lucide-react"
 import { getSupabaseBrowserClient } from "@/lib/supabase/client"
 import { updateUserPassword } from "@/lib/supabase/auth"
+
+type EmailOtpType =
+  | "recovery"
+  | "signup"
+  | "invite"
+  | "magiclink"
+  | "email_change"
+  | "email"
 
 function ResetPasswordContent() {
   const router = useRouter()
@@ -34,17 +43,29 @@ function ResetPasswordContent() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [formError, setFormError] = useState("")
   const [isSuccess, setIsSuccess] = useState(false)
+  const [countdown, setCountdown] = useState<number | null>(null)
+
+  // Prevent duplicate token verification on re-renders or React Strict Mode
+  const verificationRanRef = useRef(false)
 
   useEffect(() => {
     let isMounted = true
 
     const verifyRecoverySession = async () => {
-      // 1. Check for error parameters in URL (e.g. expired link)
+      // 1. Check for error parameters in URL (e.g. Supabase redirect errors)
       const errorParam =
         searchParams.get("error_description") || searchParams.get("error")
       if (errorParam) {
         if (isMounted) {
-          setAuthError(errorParam)
+          const isExpired =
+            errorParam.toLowerCase().includes("expired") ||
+            errorParam.toLowerCase().includes("invalid") ||
+            errorParam.toLowerCase().includes("access_denied")
+          setAuthError(
+            isExpired
+              ? "This password reset link has expired or has already been used. Please request a new one."
+              : errorParam
+          )
           setIsCheckingLink(false)
         }
         return
@@ -59,45 +80,152 @@ function ResetPasswordContent() {
         return
       }
 
-      // 2. If PKCE code is in search parameters, exchange it for session
+      // Avoid verifying the single-use token multiple times
+      if (verificationRanRef.current) return
+      verificationRanRef.current = true
+
+      const tokenHash = searchParams.get("token_hash")
+      const typeParam = searchParams.get("type") as EmailOtpType | null
       const code = searchParams.get("code")
-      if (code) {
+
+      // -----------------------------------------------------------------------
+      // 2. Primary Method: Supabase Token Hash OTP Verification
+      // Works across any device, browser, or email client (Gmail in-app webview)
+      // -----------------------------------------------------------------------
+      if (tokenHash) {
         try {
-          await supabase.auth.exchangeCodeForSession(code)
-        } catch {
-          // May already be exchanged; proceed to verify session below
+          const otpType: EmailOtpType = typeParam || "recovery"
+          const { data, error } = await supabase.auth.verifyOtp({
+            token_hash: tokenHash,
+            type: otpType,
+          })
+
+          if (error) {
+            if (isMounted) {
+              const msg = error.message.toLowerCase()
+              const isExpired =
+                msg.includes("expired") ||
+                msg.includes("invalid") ||
+                error.status === 400 ||
+                error.status === 401
+              setAuthError(
+                isExpired
+                  ? "This password reset link has expired or has already been used. Please request a new one."
+                  : error.message
+              )
+              setHasValidSession(false)
+              setIsCheckingLink(false)
+            }
+            return
+          }
+
+          if (data?.user && isMounted) {
+            setHasValidSession(true)
+            setUserEmail(data.user.email || null)
+            setAuthError(null)
+            setIsCheckingLink(false)
+            return
+          }
+        } catch (err: unknown) {
+          if (isMounted) {
+            const msg =
+              err instanceof Error
+                ? err.message
+                : "Failed to verify password reset token."
+            setAuthError(msg)
+            setHasValidSession(false)
+            setIsCheckingLink(false)
+          }
+          return
         }
       }
 
-      // 3. Check for existing session
-      try {
-        const { data: sessionData } = await supabase.auth.getSession()
-        if (sessionData?.session?.user && isMounted) {
-          setHasValidSession(true)
-          setUserEmail(sessionData.session.user.email || null)
+      // -----------------------------------------------------------------------
+      // 3. Fallback Method: PKCE Code Exchange
+      // Supported if the link was generated with default PKCE flow (?code=...)
+      // -----------------------------------------------------------------------
+      if (code) {
+        try {
+          const { data, error } = await supabase.auth.exchangeCodeForSession(code)
+          if (error) {
+            if (isMounted) {
+              setAuthError(
+                "This password reset link could not be verified in this browser. If you opened this link on a different device or in an email app, please request a new link or open it in the original browser."
+              )
+              setHasValidSession(false)
+              setIsCheckingLink(false)
+            }
+            return
+          }
+
+          if (data?.user && isMounted) {
+            setHasValidSession(true)
+            setUserEmail(data.user.email || null)
+            setAuthError(null)
+            setIsCheckingLink(false)
+            return
+          }
+        } catch (err: unknown) {
+          if (isMounted) {
+            const msg =
+              err instanceof Error
+                ? err.message
+                : "Failed to verify recovery code."
+            setAuthError(msg)
+            setHasValidSession(false)
+            setIsCheckingLink(false)
+          }
+          return
         }
-      } catch {
-        // Fallback to authStateChange listener below
-      } finally {
-        if (isMounted) {
-          setIsCheckingLink(false)
-        }
+      }
+
+      // -----------------------------------------------------------------------
+      // 4. Hash Fragment Fallback (#access_token=...&type=recovery)
+      // -----------------------------------------------------------------------
+      if (
+        typeof window !== "undefined" &&
+        window.location.hash &&
+        window.location.hash.includes("type=recovery")
+      ) {
+        // Supabase client automatically processes the hash fragment and fires onAuthStateChange
+        const hashTimer = setTimeout(() => {
+          if (isMounted && !hasValidSession) {
+            setAuthError(
+              "This password reset link has expired or is invalid. Please request a new one."
+            )
+            setIsCheckingLink(false)
+          }
+        }, 3000)
+
+        return () => clearTimeout(hashTimer)
+      }
+
+      // -----------------------------------------------------------------------
+      // 5. No valid recovery parameters found in URL
+      // -----------------------------------------------------------------------
+      if (isMounted) {
+        setAuthError(
+          "No password reset token was detected in this link. Please request a new password reset from the sign-in page."
+        )
+        setHasValidSession(false)
+        setIsCheckingLink(false)
       }
     }
 
     verifyRecoverySession()
 
+    // -------------------------------------------------------------------------
+    // 6. Listen for PASSWORD_RECOVERY auth state changes
+    // Only accepts authoritative recovery events to prevent misattributing sessions
+    // -------------------------------------------------------------------------
     const supabase = getSupabaseBrowserClient()
     const { data: authListener } = supabase?.auth.onAuthStateChange(
       (event, session) => {
-        if (
-          event === "PASSWORD_RECOVERY" ||
-          event === "SIGNED_IN" ||
-          session?.user
-        ) {
+        if (event === "PASSWORD_RECOVERY") {
           if (isMounted) {
             setHasValidSession(true)
             if (session?.user?.email) setUserEmail(session.user.email)
+            setAuthError(null)
             setIsCheckingLink(false)
           }
         }
@@ -108,7 +236,22 @@ function ResetPasswordContent() {
       isMounted = false
       authListener?.subscription?.unsubscribe()
     }
-  }, [searchParams])
+  }, [searchParams, hasValidSession])
+
+  // Handle countdown redirect after success
+  useEffect(() => {
+    if (countdown === null) return
+    if (countdown <= 0) {
+      router.push("/login")
+      return
+    }
+
+    const timer = setTimeout(() => {
+      setCountdown((prev) => (prev !== null ? prev - 1 : null))
+    }, 1000)
+
+    return () => clearTimeout(timer)
+  }, [countdown, router])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -130,6 +273,7 @@ function ResetPasswordContent() {
       const res = await updateUserPassword(newPassword)
       if (res.success) {
         setIsSuccess(true)
+        setCountdown(3)
       } else {
         setFormError(res.message)
       }
@@ -160,9 +304,10 @@ function ResetPasswordContent() {
               : "Choose a new strong password for your LOCANO account."}
           </p>
           {userEmail && (
-            <div className="mt-2.5">
-              <span className="inline-block px-3 py-0.5 rounded-full bg-slate-100 text-slate-700 text-xs font-semibold">
-                {userEmail}
+            <div className="mt-3">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50/80 border border-blue-100 text-[#1f6fe5] text-xs font-semibold">
+                <Mail className="w-3 h-3" />
+                <span>{userEmail}</span>
               </span>
             </div>
           )}
@@ -217,7 +362,12 @@ function ResetPasswordContent() {
             <div className="p-3.5 rounded-2xl bg-emerald-50/70 border border-emerald-200 text-emerald-900 text-xs text-left space-y-1">
               <p className="font-bold">Password Reset Complete</p>
               <p className="text-emerald-800 leading-relaxed text-[11px]">
-                You can now log in securely with your updated password on both student and vendor portals.
+                Your password has been successfully updated.
+                {countdown !== null && (
+                  <span className="block mt-1 font-semibold text-emerald-900">
+                    Redirecting to sign in in {countdown}s...
+                  </span>
+                )}
               </p>
             </div>
 
