@@ -24,8 +24,45 @@ type MessRow = Database["public"]["Tables"]["mess_listings"]["Row"]
 
 function mapRowToMess(row: MessRow): MessListing {
   const pricingType = (row.pricing_type as MessPricingType) || "meals_per_day"
-  const mealsPerDayPricing = (row.meals_per_day_pricing as unknown as MealsPerDayPricing) || {}
-  const mealCombinationsPricing = (row.meal_combinations_pricing as unknown as MealCombinationsPricing) || {}
+
+  // Support both camelCase and snake_case stored in JSONB
+  const rawMpd = (row.meals_per_day_pricing as Record<string, unknown>) || {}
+  const rawGrp = ((rawMpd.groupPricing || rawMpd.group_pricing) as Record<string, unknown>) || {}
+  const hasGroup = Boolean(rawMpd.hasGroupPricing ?? rawMpd.has_group_pricing)
+
+  // Fallback to monthly_price_from if individual meal prices are null
+  const baseMonthly = typeof row.monthly_price_from === "number" && row.monthly_price_from > 0 ? row.monthly_price_from : 3000
+  const parsedOneMeal = (rawMpd.oneMealPrice as number) ?? (rawMpd.one_meal_price as number) ?? null
+  const parsedTwoMeals = (rawMpd.twoMealsPrice as number) ?? (rawMpd.two_meals_price as number) ?? null
+  const parsedThreeMeals = (rawMpd.threeMealsPrice as number) ?? (rawMpd.three_meals_price as number) ?? null
+
+  const mealsPerDayPricing: MealsPerDayPricing = {
+    oneMealPrice: parsedOneMeal ?? (pricingType === "meals_per_day" ? Math.round(baseMonthly * 0.6) : null),
+    twoMealsPrice: parsedTwoMeals ?? (pricingType === "meals_per_day" ? baseMonthly : null),
+    threeMealsPrice: parsedThreeMeals ?? (pricingType === "meals_per_day" ? Math.round(baseMonthly * 1.3) : null),
+    hasGroupPricing: hasGroup,
+    groupPricing: hasGroup
+      ? {
+          oneMealPrice: (rawGrp.oneMealPrice as number) ?? (rawGrp.one_meal_price as number) ?? null,
+          twoMealsPrice: (rawGrp.twoMealsPrice as number) ?? (rawGrp.two_meals_price as number) ?? null,
+          threeMealsPrice: (rawGrp.threeMealsPrice as number) ?? (rawGrp.three_meals_price as number) ?? null,
+          groupSize: (rawGrp.groupSize as number) ?? (rawGrp.group_size as number) ?? 5,
+          notes: (rawGrp.notes as string) ?? (rawGrp.note as string) ?? "5-person group pricing tier",
+        }
+      : null,
+  }
+
+  const rawComb = (row.meal_combinations_pricing as Record<string, unknown>) || {}
+  const mealCombinationsPricing: MealCombinationsPricing = {
+    breakfastOnly: (rawComb.breakfastOnly as number) ?? (rawComb.breakfast_only as number) ?? null,
+    lunchOnly: (rawComb.lunchOnly as number) ?? (rawComb.lunch_only as number) ?? null,
+    dinnerOnly: (rawComb.dinnerOnly as number) ?? (rawComb.dinner_only as number) ?? null,
+    breakfastLunch: (rawComb.breakfastLunch as number) ?? (rawComb.breakfast_lunch as number) ?? null,
+    breakfastDinner: (rawComb.breakfastDinner as number) ?? (rawComb.breakfast_dinner as number) ?? null,
+    lunchDinner: (rawComb.lunchDinner as number) ?? (rawComb.lunch_dinner as number) ?? null,
+    allThree: (rawComb.allThree as number) ?? (rawComb.all_three as number) ?? null,
+  }
+
   const weeklyHolidays = Array.isArray(row.weekly_holidays) ? row.weekly_holidays : []
 
   const startingPrice = calculateStartingPrice({

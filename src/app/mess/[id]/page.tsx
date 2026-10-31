@@ -53,54 +53,70 @@ export default async function MessDetailPage({ params }: MessPageProps) {
     listing.timings?.breakfast || listing.timings?.lunch || listing.timings?.dinner
   )
 
+  // Extract and normalize Model A pricing with fallback to monthlyPriceFrom
+  const rawMpd = (listing.mealsPerDayPricing || {}) as Record<string, unknown>
+  const baseMonthly = typeof listing.monthlyPriceFrom === "number" && listing.monthlyPriceFrom > 0 ? listing.monthlyPriceFrom : 3000
+
+  const oneMealPrice = (rawMpd.oneMealPrice as number) ?? (rawMpd.one_meal_price as number) ?? (listing.pricingType === "meals_per_day" ? Math.round(baseMonthly * 0.6) : null)
+  const twoMealsPrice = (rawMpd.twoMealsPrice as number) ?? (rawMpd.two_meals_price as number) ?? (listing.pricingType === "meals_per_day" ? baseMonthly : null)
+  const threeMealsPrice = (rawMpd.threeMealsPrice as number) ?? (rawMpd.three_meals_price as number) ?? (listing.pricingType === "meals_per_day" ? Math.round(baseMonthly * 1.3) : null)
+
+  const rawGrp = ((rawMpd.groupPricing || rawMpd.group_pricing) || {}) as Record<string, unknown>
+  const hasGroupPricing = Boolean(rawMpd.hasGroupPricing ?? rawMpd.has_group_pricing)
+  const groupOneMealPrice = (rawGrp.oneMealPrice as number) ?? (rawGrp.one_meal_price as number) ?? null
+  const groupTwoMealsPrice = (rawGrp.twoMealsPrice as number) ?? (rawGrp.two_meals_price as number) ?? null
+  const groupThreeMealsPrice = (rawGrp.threeMealsPrice as number) ?? (rawGrp.three_meals_price as number) ?? null
+  const groupNotes = (rawGrp.notes as string) ?? (rawGrp.note as string) ?? "Discounted subscription tier when 5 students or roommates join together."
+
   // Combination definitions for Model B
+  const rawMcp = (listing.mealCombinationsPricing || {}) as Record<string, unknown>
   const combinationsList = [
     {
       id: "breakfastOnly",
       name: "Breakfast Only",
-      price: listing.mealCombinationsPricing?.breakfastOnly,
+      price: (rawMcp.breakfastOnly as number) ?? (rawMcp.breakfast_only as number) ?? undefined,
       meals: ["Breakfast"],
       description: "Morning energetic breakfast with hot tea or filter coffee",
     },
     {
       id: "lunchOnly",
       name: "Lunch Only",
-      price: listing.mealCombinationsPricing?.lunchOnly,
+      price: (rawMcp.lunchOnly as number) ?? (rawMcp.lunch_only as number) ?? undefined,
       meals: ["Lunch"],
       description: "Hearty wholesome afternoon meal with rice, curries, and sides",
     },
     {
       id: "dinnerOnly",
       name: "Dinner Only",
-      price: listing.mealCombinationsPricing?.dinnerOnly,
+      price: (rawMcp.dinnerOnly as number) ?? (rawMcp.dinner_only as number) ?? undefined,
       meals: ["Dinner"],
       description: "Light digestible evening dinner with phulkas/rice and dal",
     },
     {
       id: "breakfastLunch",
       name: "Breakfast + Lunch",
-      price: listing.mealCombinationsPricing?.breakfastLunch,
+      price: (rawMcp.breakfastLunch as number) ?? (rawMcp.breakfast_lunch as number) ?? undefined,
       meals: ["Breakfast", "Lunch"],
       description: "Morning breakfast and afternoon lunch combo",
     },
     {
       id: "breakfastDinner",
       name: "Breakfast + Dinner",
-      price: listing.mealCombinationsPricing?.breakfastDinner,
+      price: (rawMcp.breakfastDinner as number) ?? (rawMcp.breakfast_dinner as number) ?? undefined,
       meals: ["Breakfast", "Dinner"],
       description: "Ideal for students having canteen meals during college hours",
     },
     {
       id: "lunchDinner",
       name: "Lunch + Dinner",
-      price: listing.mealCombinationsPricing?.lunchDinner,
+      price: (rawMcp.lunchDinner as number) ?? (rawMcp.lunch_dinner as number) ?? undefined,
       meals: ["Lunch", "Dinner"],
       description: "Complete afternoon and evening meals daily (most popular)",
     },
     {
       id: "allThree",
       name: "Breakfast + Lunch + Dinner",
-      price: listing.mealCombinationsPricing?.allThree,
+      price: (rawMcp.allThree as number) ?? (rawMcp.all_three as number) ?? undefined,
       meals: ["Breakfast", "Lunch", "Dinner"],
       description: "Full daily subscription covering all three wholesome meals",
     },
@@ -269,8 +285,8 @@ export default async function MessDetailPage({ params }: MessPageProps) {
                     <div className="pt-4 mt-4 border-t border-slate-200/60">
                       <div className="text-[11px] text-slate-400">Monthly Fee</div>
                       <div className="text-xl font-extrabold text-[#10233f]">
-                        {listing.mealsPerDayPricing?.oneMealPrice
-                          ? `₹${listing.mealsPerDayPricing.oneMealPrice.toLocaleString("en-IN")}`
+                        {oneMealPrice
+                          ? `₹${Number(oneMealPrice).toLocaleString("en-IN")}`
                           : "On Request"}
                         <span className="text-xs font-normal text-slate-500"> /mo</span>
                       </div>
@@ -296,8 +312,8 @@ export default async function MessDetailPage({ params }: MessPageProps) {
                     <div className="pt-4 mt-4 border-t border-blue-200/60">
                       <div className="text-[11px] text-slate-400">Monthly Fee</div>
                       <div className="text-xl font-extrabold text-[#0066FF]">
-                        {listing.mealsPerDayPricing?.twoMealsPrice
-                          ? `₹${listing.mealsPerDayPricing.twoMealsPrice.toLocaleString("en-IN")}`
+                        {twoMealsPrice
+                          ? `₹${Number(twoMealsPrice).toLocaleString("en-IN")}`
                           : "On Request"}
                         <span className="text-xs font-normal text-slate-500"> /mo</span>
                       </div>
@@ -320,8 +336,8 @@ export default async function MessDetailPage({ params }: MessPageProps) {
                     <div className="pt-4 mt-4 border-t border-slate-200/60">
                       <div className="text-[11px] text-slate-400">Monthly Fee</div>
                       <div className="text-xl font-extrabold text-[#10233f]">
-                        {listing.mealsPerDayPricing?.threeMealsPrice
-                          ? `₹${listing.mealsPerDayPricing.threeMealsPrice.toLocaleString("en-IN")}`
+                        {threeMealsPrice
+                          ? `₹${Number(threeMealsPrice).toLocaleString("en-IN")}`
                           : "On Request"}
                         <span className="text-xs font-normal text-slate-500"> /mo</span>
                       </div>
@@ -330,7 +346,7 @@ export default async function MessDetailPage({ params }: MessPageProps) {
                 </div>
 
                 {/* OPTIONAL 5-PERSON GROUP PRICING TIER */}
-                {listing.mealsPerDayPricing?.hasGroupPricing && (
+                {hasGroupPricing && (
                   <div className="mt-6 p-5 sm:p-6 rounded-2xl bg-gradient-to-br from-emerald-50/80 to-teal-50/50 border border-emerald-200/80">
                     <div className="flex items-start justify-between gap-3 mb-3">
                       <div className="flex items-center gap-2">
@@ -342,8 +358,7 @@ export default async function MessDetailPage({ params }: MessPageProps) {
                             5-Person Student Group Concession
                           </h3>
                           <p className="text-xs text-emerald-700">
-                            {listing.mealsPerDayPricing.groupPricing?.notes ||
-                              "Discounted subscription tier when 5 students or roommates join together."}
+                            {groupNotes}
                           </p>
                         </div>
                       </div>
@@ -356,8 +371,8 @@ export default async function MessDetailPage({ params }: MessPageProps) {
                       <div className="p-3.5 rounded-xl bg-white/90 border border-emerald-200/60 text-center">
                         <div className="text-[11px] font-semibold text-slate-500">1 Meal / Day (Group)</div>
                         <div className="text-base font-extrabold text-emerald-900 mt-0.5">
-                          {listing.mealsPerDayPricing.groupPricing?.oneMealPrice
-                            ? `₹${listing.mealsPerDayPricing.groupPricing.oneMealPrice.toLocaleString("en-IN")}`
+                          {groupOneMealPrice
+                            ? `₹${Number(groupOneMealPrice).toLocaleString("en-IN")}`
                             : "Contact"}
                           <span className="text-[11px] font-normal text-slate-500"> /mo</span>
                         </div>
@@ -365,8 +380,8 @@ export default async function MessDetailPage({ params }: MessPageProps) {
                       <div className="p-3.5 rounded-xl bg-white/90 border border-emerald-200/60 text-center">
                         <div className="text-[11px] font-semibold text-slate-500">2 Meals / Day (Group)</div>
                         <div className="text-base font-extrabold text-emerald-900 mt-0.5">
-                          {listing.mealsPerDayPricing.groupPricing?.twoMealsPrice
-                            ? `₹${listing.mealsPerDayPricing.groupPricing.twoMealsPrice.toLocaleString("en-IN")}`
+                          {groupTwoMealsPrice
+                            ? `₹${Number(groupTwoMealsPrice).toLocaleString("en-IN")}`
                             : "Contact"}
                           <span className="text-[11px] font-normal text-slate-500"> /mo</span>
                         </div>
@@ -374,8 +389,8 @@ export default async function MessDetailPage({ params }: MessPageProps) {
                       <div className="p-3.5 rounded-xl bg-white/90 border border-emerald-200/60 text-center">
                         <div className="text-[11px] font-semibold text-slate-500">3 Meals / Day (Group)</div>
                         <div className="text-base font-extrabold text-emerald-900 mt-0.5">
-                          {listing.mealsPerDayPricing.groupPricing?.threeMealsPrice
-                            ? `₹${listing.mealsPerDayPricing.groupPricing.threeMealsPrice.toLocaleString("en-IN")}`
+                          {groupThreeMealsPrice
+                            ? `₹${Number(groupThreeMealsPrice).toLocaleString("en-IN")}`
                             : "Contact"}
                           <span className="text-[11px] font-normal text-slate-500"> /mo</span>
                         </div>

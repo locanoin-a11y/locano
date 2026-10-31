@@ -92,14 +92,15 @@ export interface MessListing {
  */
 export function calculateStartingPrice(mess: Partial<MessListing>): number {
   if (mess.pricingType === "meal_combinations" && mess.mealCombinationsPricing) {
+    const comb = mess.mealCombinationsPricing as Record<string, unknown>
     const prices = [
-      mess.mealCombinationsPricing.breakfastOnly,
-      mess.mealCombinationsPricing.lunchOnly,
-      mess.mealCombinationsPricing.dinnerOnly,
-      mess.mealCombinationsPricing.breakfastLunch,
-      mess.mealCombinationsPricing.breakfastDinner,
-      mess.mealCombinationsPricing.lunchDinner,
-      mess.mealCombinationsPricing.allThree,
+      comb.breakfastOnly ?? comb.breakfast_only,
+      comb.lunchOnly ?? comb.lunch_only,
+      comb.dinnerOnly ?? comb.dinner_only,
+      comb.breakfastLunch ?? comb.breakfast_lunch,
+      comb.breakfastDinner ?? comb.breakfast_dinner,
+      comb.lunchDinner ?? comb.lunch_dinner,
+      comb.allThree ?? comb.all_three,
     ].filter((p): p is number => typeof p === "number" && p > 0)
 
     if (prices.length > 0) {
@@ -108,10 +109,11 @@ export function calculateStartingPrice(mess: Partial<MessListing>): number {
   }
 
   if (mess.pricingType === "meals_per_day" && mess.mealsPerDayPricing) {
+    const mpd = mess.mealsPerDayPricing as Record<string, unknown>
     const prices = [
-      mess.mealsPerDayPricing.oneMealPrice,
-      mess.mealsPerDayPricing.twoMealsPrice,
-      mess.mealsPerDayPricing.threeMealsPrice,
+      mpd.oneMealPrice ?? mpd.one_meal_price,
+      mpd.twoMealsPrice ?? mpd.two_meals_price,
+      mpd.threeMealsPrice ?? mpd.three_meals_price,
     ].filter((p): p is number => typeof p === "number" && p > 0)
 
     if (prices.length > 0) {
