@@ -172,8 +172,8 @@ export function Navbar() {
     pathname === "/about" ||
     (pathname === "/" && activeSection === "about")
 
-  const activeCls = "text-[#1f6fe5] bg-[#1f6fe5]/10 border border-[#1f6fe5]/20 font-semibold shadow-2xs backdrop-blur-xs"
-  const inactiveCls = "text-slate-700 hover:text-[#1f6fe5] hover:bg-white/60 font-medium border border-transparent transition-all"
+  const activeCls = "liquid-glass-active font-semibold shadow-xs"
+  const inactiveCls = "liquid-glass-inactive font-medium"
 
   const isVendor = authUser?.role === "vendor"
   const isPgOwner = authUser?.role === "pg_owner"
@@ -203,39 +203,39 @@ export function Navbar() {
         </div>
 
         {/* DESKTOP NAVIGATION LINKS */}
-        <div className="hidden items-center gap-0.5 text-xs font-medium text-slate-700 sm:flex sm:gap-1 sm:text-sm">
+        <div className="hidden items-center gap-1 text-xs font-medium sm:flex sm:gap-1.5 sm:text-sm">
           <Link
             href="/accommodation"
             onClick={closeMenu}
-            className={`px-2.5 py-1.5 rounded-full transition-colors sm:px-3 ${isAccommodationActive ? activeCls : inactiveCls}`}
+            className={`px-3 py-1.5 rounded-full ${isAccommodationActive ? activeCls : inactiveCls}`}
           >
             Accommodation
           </Link>
           <Link
             href="/mess"
             onClick={closeMenu}
-            className={`px-2.5 py-1.5 rounded-full transition-colors sm:px-3 ${isMessActive ? activeCls : inactiveCls}`}
+            className={`px-3 py-1.5 rounded-full ${isMessActive ? activeCls : inactiveCls}`}
           >
             Food &amp; Mess
           </Link>
           <Link
             href="/transport"
             onClick={closeMenu}
-            className={`px-2.5 py-1.5 rounded-full transition-colors sm:px-3 ${isRoutesActive ? activeCls : inactiveCls}`}
+            className={`px-3 py-1.5 rounded-full ${isRoutesActive ? activeCls : inactiveCls}`}
           >
             Transport
           </Link>
           <Link
             href="/emergency"
             onClick={closeMenu}
-            className={`px-2.5 py-1.5 rounded-full transition-colors sm:px-3 ${isEssentialActive ? activeCls : inactiveCls}`}
+            className={`px-3 py-1.5 rounded-full ${isEssentialActive ? activeCls : inactiveCls}`}
           >
             Essential Services
           </Link>
           <Link
             href={pathname === "/" ? "#about" : "/about"}
             onClick={closeMenu}
-            className={`px-2.5 py-1.5 rounded-full transition-colors sm:px-3 ${isAboutActive ? activeCls : inactiveCls}`}
+            className={`px-3 py-1.5 rounded-full ${isAboutActive ? activeCls : inactiveCls}`}
           >
             About
           </Link>
@@ -249,7 +249,7 @@ export function Navbar() {
               onClick={() => setIsAccountDropdownOpen((prev) => !prev)}
               aria-expanded={isAccountDropdownOpen}
               aria-label="User account menu"
-              className="flex min-h-11 min-w-11 sm:min-h-0 sm:min-w-0 items-center gap-2 rounded-full bg-white/70 hover:bg-white/90 border border-white/80 backdrop-blur-md p-1 sm:pr-3 text-xs font-semibold text-[#10233f] transition-all cursor-pointer shadow-2xs"
+              className="flex min-h-11 min-w-11 sm:min-h-0 sm:min-w-0 items-center gap-2 rounded-full liquid-glass-button p-1 sm:pr-3 text-xs font-semibold text-[#10233f] cursor-pointer"
             >
               {/* Circular Initial Badge */}
               <div
@@ -275,7 +275,7 @@ export function Navbar() {
 
             {/* DROPDOWN MENU */}
             {isAccountDropdownOpen && (
-              <div className="absolute right-0 top-[calc(100%+0.6rem)] w-60 sm:w-64 bg-white/90 backdrop-blur-2xl rounded-3xl shadow-2xl border border-white/80 p-2 z-50 animate-fadeIn text-xs text-slate-700">
+              <div className="absolute right-0 top-[calc(100%+0.6rem)] w-60 sm:w-64 liquid-glass-dropdown rounded-3xl p-2 z-50 animate-fadeIn text-xs text-slate-700">
                 {/* Header Section */}
                 <div className="p-3 border-b border-slate-100 mb-1">
                   <div className="flex items-center gap-2 mb-1.5">
@@ -395,7 +395,7 @@ export function Navbar() {
           <button
             type="button"
             onClick={openAccount}
-            className="ml-1 flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-1.5 rounded-full bg-[#10233f] px-3 py-2 text-xs font-semibold text-white shadow-xs transition-colors hover:bg-[#1f6fe5] sm:min-h-0 sm:min-w-0 sm:justify-start sm:px-4 sm:py-1.5 sm:text-sm cursor-pointer"
+            className="ml-1 flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-1.5 rounded-full liquid-glass-cta px-3 py-2 text-xs font-semibold text-white sm:min-h-0 sm:min-w-0 sm:justify-start sm:px-4 sm:py-1.5 sm:text-sm cursor-pointer"
           >
             <User className="size-3.5" />
             <span className="hidden sm:inline">Sign In</span>
@@ -410,7 +410,7 @@ export function Navbar() {
           aria-controls="mobile-navigation"
           aria-label={isMenuOpen ? "Close navigation menu" : "Open navigation menu"}
           onClick={() => setIsMenuOpen((open) => !open)}
-          className="flex size-11 shrink-0 items-center justify-center rounded-full text-[#10233f] transition-colors hover:bg-white/60 sm:hidden cursor-pointer"
+          className="flex size-11 shrink-0 items-center justify-center rounded-full text-[#10233f] transition-colors hover:bg-white/30 sm:hidden cursor-pointer"
         >
           {isMenuOpen ? <X className="size-5" /> : <Menu className="size-5" />}
         </button>
@@ -419,7 +419,7 @@ export function Navbar() {
         {isMenuOpen && (
           <div
             id="mobile-navigation"
-            className="absolute left-0 right-0 top-[calc(100%+0.5rem)] flex flex-col gap-1.5 rounded-3xl border border-white/80 bg-white/85 p-2.5 shadow-2xl backdrop-blur-2xl sm:hidden"
+            className="absolute left-0 right-0 top-[calc(100%+0.5rem)] flex flex-col gap-1.5 rounded-3xl liquid-glass-dropdown p-2.5 sm:hidden"
           >
             <Link
               href="/accommodation"
