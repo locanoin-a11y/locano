@@ -172,8 +172,8 @@ export function Navbar() {
     pathname === "/about" ||
     (pathname === "/" && activeSection === "about")
 
-  const activeCls = "text-[#1f6fe5] bg-[#e0efff] font-semibold"
-  const inactiveCls = "text-slate-700 hover:text-[#1f6fe5] hover:bg-slate-100/60 font-medium"
+  const activeCls = "text-[#1f6fe5] bg-[#1f6fe5]/10 border border-[#1f6fe5]/20 font-semibold shadow-2xs backdrop-blur-xs"
+  const inactiveCls = "text-slate-700 hover:text-[#1f6fe5] hover:bg-white/60 font-medium border border-transparent transition-all"
 
   const isVendor = authUser?.role === "vendor"
   const isPgOwner = authUser?.role === "pg_owner"
@@ -181,10 +181,8 @@ export function Navbar() {
   return (
     <header className="fixed top-3 left-0 right-0 z-40 flex justify-center px-2 sm:top-5 sm:px-4 pointer-events-none">
       <nav
-        className={`pointer-events-auto relative flex w-full max-w-none items-center gap-2 px-3 py-2.5 sm:w-auto sm:gap-2 sm:px-4 sm:py-2.5 rounded-full border border-slate-200/60 pill-navbar transition-all duration-420 ${
-          isScrolled
-            ? "pill-navbar-scrolled bg-white/92 shadow-md shadow-slate-900/5"
-            : "bg-white/80 backdrop-blur-md shadow-xs"
+        className={`pointer-events-auto relative flex w-full max-w-none items-center gap-2 px-3 py-2.5 sm:w-auto sm:gap-2 sm:px-4 sm:py-2.5 rounded-full pill-navbar transition-all duration-420 ${
+          isScrolled ? "pill-navbar-scrolled" : ""
         }`}
       >
         {/* LOGO */}
@@ -251,7 +249,7 @@ export function Navbar() {
               onClick={() => setIsAccountDropdownOpen((prev) => !prev)}
               aria-expanded={isAccountDropdownOpen}
               aria-label="User account menu"
-              className="flex min-h-11 min-w-11 sm:min-h-0 sm:min-w-0 items-center gap-2 rounded-full bg-slate-50 hover:bg-slate-100 border border-slate-200/80 p-1 sm:pr-3 text-xs font-semibold text-[#10233f] transition-all cursor-pointer shadow-2xs"
+              className="flex min-h-11 min-w-11 sm:min-h-0 sm:min-w-0 items-center gap-2 rounded-full bg-white/70 hover:bg-white/90 border border-white/80 backdrop-blur-md p-1 sm:pr-3 text-xs font-semibold text-[#10233f] transition-all cursor-pointer shadow-2xs"
             >
               {/* Circular Initial Badge */}
               <div
@@ -277,7 +275,7 @@ export function Navbar() {
 
             {/* DROPDOWN MENU */}
             {isAccountDropdownOpen && (
-              <div className="absolute right-0 top-[calc(100%+0.6rem)] w-60 sm:w-64 bg-white rounded-3xl shadow-xl border border-slate-100 p-2 z-50 animate-fadeIn text-xs text-slate-700">
+              <div className="absolute right-0 top-[calc(100%+0.6rem)] w-60 sm:w-64 bg-white/90 backdrop-blur-2xl rounded-3xl shadow-2xl border border-white/80 p-2 z-50 animate-fadeIn text-xs text-slate-700">
                 {/* Header Section */}
                 <div className="p-3 border-b border-slate-100 mb-1">
                   <div className="flex items-center gap-2 mb-1.5">
@@ -412,7 +410,7 @@ export function Navbar() {
           aria-controls="mobile-navigation"
           aria-label={isMenuOpen ? "Close navigation menu" : "Open navigation menu"}
           onClick={() => setIsMenuOpen((open) => !open)}
-          className="flex size-11 shrink-0 items-center justify-center rounded-full text-[#10233f] transition-colors hover:bg-slate-100 sm:hidden cursor-pointer"
+          className="flex size-11 shrink-0 items-center justify-center rounded-full text-[#10233f] transition-colors hover:bg-white/60 sm:hidden cursor-pointer"
         >
           {isMenuOpen ? <X className="size-5" /> : <Menu className="size-5" />}
         </button>
@@ -421,7 +419,7 @@ export function Navbar() {
         {isMenuOpen && (
           <div
             id="mobile-navigation"
-            className="absolute left-0 right-0 top-[calc(100%+0.5rem)] flex flex-col gap-1 rounded-2xl border border-slate-200/70 bg-white/95 p-2 shadow-lg backdrop-blur-md sm:hidden"
+            className="absolute left-0 right-0 top-[calc(100%+0.5rem)] flex flex-col gap-1.5 rounded-3xl border border-white/80 bg-white/85 p-2.5 shadow-2xl backdrop-blur-2xl sm:hidden"
           >
             <Link
               href="/accommodation"
