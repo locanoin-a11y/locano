@@ -224,9 +224,16 @@ export function AccountCard({
           password,
         })
         setAuthResult(res)
-        if (res.success && res.user?.role) {
-          // Immediately align UI with the authoritative database role
-          setRole(res.user.role)
+        if (res.success) {
+          if (res.user?.role) {
+            // Immediately align UI with the authoritative database role
+            setRole(res.user.role)
+          }
+          // Refresh and redirect to home page after successful sign in
+          setTimeout(() => {
+            if (onDone) onDone()
+            window.location.href = "/"
+          }, 800)
         }
         if (!res.success && !res.needsConfig) {
           setError(res.message)
@@ -529,7 +536,10 @@ export function AccountCard({
 
             <button
               type="button"
-              onClick={onDone}
+              onClick={() => {
+                if (onDone) onDone()
+                window.location.href = "/"
+              }}
               className="w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-full bg-[#10233f] text-white text-xs font-bold hover:bg-[#1f6fe5] transition-colors cursor-pointer"
             >
               <span>Continue to LOCANO</span>
