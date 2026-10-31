@@ -2,12 +2,51 @@ export type DietaryType = "Pure Veg" | "Veg & Non-Veg"
 export type ServiceType = "Dine-in Mess" | "Tiffin & Delivery" | "Dine-in & Delivery"
 export type MealType = "Breakfast" | "Lunch" | "Dinner"
 
+export type MessPricingType = "meals_per_day" | "meal_combinations"
+
 export interface MealPlan {
   name: string
   price: number
   period: "month" | "15-days" | "per-meal"
   description: string
   popular?: boolean
+}
+
+/**
+ * Model A: Pricing based on the number of meals per day (1, 2, or 3 meals/day).
+ * Includes optional 5-person group pricing tier.
+ */
+export interface MealsPerDayPricing {
+  oneMealPrice?: number | null
+  twoMealsPrice?: number | null
+  threeMealsPrice?: number | null
+  hasGroupPricing?: boolean
+  groupPricing?: {
+    oneMealPrice?: number | null
+    twoMealsPrice?: number | null
+    threeMealsPrice?: number | null
+    groupSize?: number
+    notes?: string
+  } | null
+}
+
+/**
+ * Model B: Pricing based on specific meal combinations (7 combinations).
+ */
+export interface MealCombinationsPricing {
+  breakfastOnly?: number | null
+  lunchOnly?: number | null
+  dinnerOnly?: number | null
+  breakfastLunch?: number | null
+  breakfastDinner?: number | null
+  lunchDinner?: number | null
+  allThree?: number | null
+}
+
+export interface MessTimings {
+  breakfast?: string
+  lunch?: string
+  dinner?: string
 }
 
 export interface MessListing {
@@ -21,20 +60,22 @@ export interface MessListing {
   area: string
   approximateLocation: string
   nearestLandmark: string
+  // Pricing model
+  pricingType: MessPricingType
+  mealsPerDayPricing?: MealsPerDayPricing
+  mealCombinationsPricing?: MealCombinationsPricing
+  weeklyHolidays?: string[]
+  // Starting monthly price (dynamically computed or loaded)
   monthlyPriceFrom: number
   perMealPriceFrom: number
   mealsServed: MealType[]
   mealPlans: MealPlan[]
   dailyMenuSample: {
     breakfast?: string
-    lunch: string
-    dinner: string
+    lunch?: string
+    dinner?: string
   }
-  timings: {
-    breakfast?: string
-    lunch: string
-    dinner: string
-  }
+  timings: MessTimings
   highlights: string[]
   kitchenFeatures: string[]
   subscriptionRules: string[]
@@ -44,4 +85,39 @@ export interface MessListing {
   status?: "pending" | "published" | "rejected" | "archived"
   isDemo?: boolean
   createdAt?: string
+}
+
+/**
+ * Helper to compute the lowest valid monthly price from whichever pricing model is active
+ */
+export function calculateStartingPrice(mess: Partial<MessListing>): number {
+  if (mess.pricingType === "meal_combinations" && mess.mealCombinationsPricing) {
+    const prices = [
+      mess.mealCombinationsPricing.breakfastOnly,
+      mess.mealCombinationsPricing.lunchOnly,
+      mess.mealCombinationsPricing.dinnerOnly,
+      mess.mealCombinationsPricing.breakfastLunch,
+      mess.mealCombinationsPricing.breakfastDinner,
+      mess.mealCombinationsPricing.lunchDinner,
+      mess.mealCombinationsPricing.allThree,
+    ].filter((p): p is number => typeof p === "number" && p > 0)
+
+    if (prices.length > 0) {
+      return Math.min(...prices)
+    }
+  }
+
+  if (mess.pricingType === "meals_per_day" && mess.mealsPerDayPricing) {
+    const prices = [
+      mess.mealsPerDayPricing.oneMealPrice,
+      mess.mealsPerDayPricing.twoMealsPrice,
+      mess.mealsPerDayPricing.threeMealsPrice,
+    ].filter((p): p is number => typeof p === "number" && p > 0)
+
+    if (prices.length > 0) {
+      return Math.min(...prices)
+    }
+  }
+
+  return mess.monthlyPriceFrom || 0
 }

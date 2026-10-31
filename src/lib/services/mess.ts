@@ -1,5 +1,16 @@
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase/client"
-import type { MessListing, DietaryType, ServiceType, MealType, MealPlan } from "@/types/mess"
+import {
+  type MessListing,
+  type DietaryType,
+  type ServiceType,
+  type MealType,
+  type MealPlan,
+  type MessPricingType,
+  type MealsPerDayPricing,
+  type MealCombinationsPricing,
+  type MessTimings,
+  calculateStartingPrice,
+} from "@/types/mess"
 import type { Database } from "@/types/database"
 
 export interface FetchMessesParams {
@@ -12,6 +23,18 @@ export interface FetchMessesParams {
 type MessRow = Database["public"]["Tables"]["mess_listings"]["Row"]
 
 function mapRowToMess(row: MessRow): MessListing {
+  const pricingType = (row.pricing_type as MessPricingType) || "meals_per_day"
+  const mealsPerDayPricing = (row.meals_per_day_pricing as unknown as MealsPerDayPricing) || {}
+  const mealCombinationsPricing = (row.meal_combinations_pricing as unknown as MealCombinationsPricing) || {}
+  const weeklyHolidays = Array.isArray(row.weekly_holidays) ? row.weekly_holidays : []
+
+  const startingPrice = calculateStartingPrice({
+    pricingType,
+    mealsPerDayPricing,
+    mealCombinationsPricing,
+    monthlyPriceFrom: row.monthly_price_from,
+  })
+
   return {
     id: row.id,
     ownerId: row.owner_id,
@@ -23,12 +46,16 @@ function mapRowToMess(row: MessRow): MessListing {
     area: row.area,
     approximateLocation: row.approximate_location,
     nearestLandmark: row.nearest_landmark,
-    monthlyPriceFrom: row.monthly_price_from,
+    pricingType,
+    mealsPerDayPricing,
+    mealCombinationsPricing,
+    weeklyHolidays,
+    monthlyPriceFrom: startingPrice || row.monthly_price_from,
     perMealPriceFrom: row.per_meal_price_from,
     mealsServed: row.meals_served as MealType[],
     mealPlans: (row.meal_plans as unknown as MealPlan[]) || [],
     dailyMenuSample: (row.daily_menu_sample as unknown as MessListing["dailyMenuSample"]) || { lunch: "", dinner: "" },
-    timings: (row.timings as unknown as MessListing["timings"]) || { lunch: "", dinner: "" },
+    timings: (row.timings as unknown as MessTimings) || {},
     highlights: row.highlights,
     kitchenFeatures: row.kitchen_features,
     subscriptionRules: row.subscription_rules,

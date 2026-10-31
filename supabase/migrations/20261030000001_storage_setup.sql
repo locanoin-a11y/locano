@@ -28,21 +28,30 @@ create policy "Public Access to Listing Images"
 on storage.objects for select
 using (bucket_id = 'listings');
 
--- 2.2 Listing Images Upload Access:
--- Allows image uploads to the 'listings' bucket (enforcing 5MB limit and jpg/png mime types defined on bucket)
+-- 2.2 Listing Images Upload Access (Admin only):
+-- Allows image uploads to the 'listings' bucket by verified administrators only
 drop policy if exists "Admins can upload listing images" on storage.objects;
 create policy "Admins can upload listing images"
 on storage.objects for insert
-with check (bucket_id = 'listings');
+with check (
+  bucket_id = 'listings'
+  and public.is_admin()
+);
 
--- 2.3 Listing Images Update Access:
+-- 2.3 Listing Images Update Access (Admin only):
 drop policy if exists "Admins can update listing images" on storage.objects;
 create policy "Admins can update listing images"
 on storage.objects for update
-using (bucket_id = 'listings');
+using (
+  bucket_id = 'listings'
+  and public.is_admin()
+);
 
--- 2.4 Listing Images Delete Access:
+-- 2.4 Listing Images Delete Access (Admin only):
 drop policy if exists "Admins can delete listing images" on storage.objects;
 create policy "Admins can delete listing images"
 on storage.objects for delete
-using (bucket_id = 'listings');
+using (
+  bucket_id = 'listings'
+  and public.is_admin()
+);

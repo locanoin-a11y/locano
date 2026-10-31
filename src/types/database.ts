@@ -152,6 +152,10 @@ export interface Database {
           area: string
           approximate_location: string
           nearest_landmark: string
+          pricing_type: string
+          meals_per_day_pricing: Json
+          meal_combinations_pricing: Json
+          weekly_holidays: string[]
           monthly_price_from: number
           per_meal_price_from: number
           meals_served: string[]
@@ -180,6 +184,10 @@ export interface Database {
           area: string
           approximate_location?: string
           nearest_landmark?: string
+          pricing_type?: string
+          meals_per_day_pricing?: Json
+          meal_combinations_pricing?: Json
+          weekly_holidays?: string[]
           monthly_price_from: number
           per_meal_price_from?: number
           meals_served?: string[]
@@ -208,6 +216,10 @@ export interface Database {
           area?: string
           approximate_location?: string
           nearest_landmark?: string
+          pricing_type?: string
+          meals_per_day_pricing?: Json
+          meal_combinations_pricing?: Json
+          weekly_holidays?: string[]
           monthly_price_from?: number
           per_meal_price_from?: number
           meals_served?: string[]
