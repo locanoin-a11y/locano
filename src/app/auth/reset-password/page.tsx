@@ -119,9 +119,20 @@ function ResetPasswordContent() {
             return
           }
 
-          if (data?.user && isMounted) {
+          const verifiedUser = data?.user || data?.session?.user
+          if (verifiedUser && isMounted) {
             setHasValidSession(true)
-            setUserEmail(data.user.email || null)
+            setUserEmail(verifiedUser.email || null)
+            setAuthError(null)
+            setIsCheckingLink(false)
+            return
+          }
+
+          // Fallback: verify active user session if data.user was nested
+          const { data: activeUserData } = await supabase.auth.getUser()
+          if (activeUserData?.user && isMounted) {
+            setHasValidSession(true)
+            setUserEmail(activeUserData.user.email || null)
             setAuthError(null)
             setIsCheckingLink(false)
             return
@@ -158,9 +169,19 @@ function ResetPasswordContent() {
             return
           }
 
-          if (data?.user && isMounted) {
+          const codeUser = data?.user || data?.session?.user
+          if (codeUser && isMounted) {
             setHasValidSession(true)
-            setUserEmail(data.user.email || null)
+            setUserEmail(codeUser.email || null)
+            setAuthError(null)
+            setIsCheckingLink(false)
+            return
+          }
+
+          const { data: activeCodeUserData } = await supabase.auth.getUser()
+          if (activeCodeUserData?.user && isMounted) {
+            setHasValidSession(true)
+            setUserEmail(activeCodeUserData.user.email || null)
             setAuthError(null)
             setIsCheckingLink(false)
             return
