@@ -105,7 +105,7 @@ function AccommodationContent() {
   const searchParams = useSearchParams()
   const { openSearch } = useModal()
 
-  const urlSearch = searchParams.get("search") || ""
+  const urlSearch = searchParams.get("search") || searchParams.get("area") || ""
   const urlGender = (searchParams.get("gender") as FilterGender) || "All"
   const [customSearch, setCustomSearch] = useState<string | null>(null)
   const [customGender, setCustomGender] = useState<FilterGender | null>(null)

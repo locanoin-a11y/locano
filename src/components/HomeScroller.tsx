@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useRef } from "react"
+import React, { useRef, useState, useEffect } from "react"
 import Link from "next/link"
 import {
   GraduationCap,
@@ -10,94 +10,39 @@ import {
   ArrowUpRight,
   Sparkles,
 } from "lucide-react"
-
-interface CampusHub {
-  name: string
-  subtitle: string
-  area: string
-  tag: string
-  badgeBg: string
-  pgCount: string
-  messCount: string
-}
-
-const CAMPUS_HUBS: CampusHub[] = [
-  {
-    name: "NITK Surathkal",
-    subtitle: "National Institute of Technology",
-    area: "Surathkal",
-    tag: "Engineering & Tech",
-    badgeBg: "bg-blue-50 text-[#1f6fe5] border-blue-200/60",
-    pgCount: "15+ PGs",
-    messCount: "10+ Messes",
-  },
-  {
-    name: "Yenepoya University",
-    subtitle: "Medical, Dental & Allied Sciences",
-    area: "Deralakatte",
-    tag: "Medical Hub",
-    badgeBg: "bg-emerald-50 text-emerald-700 border-emerald-200/60",
-    pgCount: "25+ PGs",
-    messCount: "18+ Messes",
-  },
-  {
-    name: "KSHEMA / Nitte",
-    subtitle: "K.S. Hegde Medical Academy",
-    area: "Deralakatte",
-    tag: "Health Sciences",
-    badgeBg: "bg-purple-50 text-purple-700 border-purple-200/60",
-    pgCount: "20+ PGs",
-    messCount: "14+ Messes",
-  },
-  {
-    name: "Father Muller",
-    subtitle: "Medical & Nursing College",
-    area: "Kankanady",
-    tag: "Healthcare",
-    badgeBg: "bg-rose-50 text-rose-700 border-rose-200/60",
-    pgCount: "18+ PGs",
-    messCount: "12+ Messes",
-  },
-  {
-    name: "St. Aloysius University",
-    subtitle: "Autonomous Multi-Disciplinary",
-    area: "Hampankatta",
-    tag: "Central Campus",
-    badgeBg: "bg-amber-50 text-amber-800 border-amber-200/60",
-    pgCount: "16+ PGs",
-    messCount: "15+ Messes",
-  },
-  {
-    name: "Sahyadri College",
-    subtitle: "College of Engineering & Mgmt",
-    area: "Padil",
-    tag: "Tech & Innovation",
-    badgeBg: "bg-cyan-50 text-cyan-800 border-cyan-200/60",
-    pgCount: "14+ PGs",
-    messCount: "9+ Messes",
-  },
-  {
-    name: "Balmatta Student Zone",
-    subtitle: "Coaching Centers & City Colleges",
-    area: "Balmatta",
-    tag: "Student Center",
-    badgeBg: "bg-orange-50 text-[#ea580c] border-orange-200/60",
-    pgCount: "22+ PGs",
-    messCount: "16+ Messes",
-  },
-  {
-    name: "Kadri & Mallikatte",
-    subtitle: "Near Hospitals & IT corridor",
-    area: "Kadri",
-    tag: "Residential Zone",
-    badgeBg: "bg-indigo-50 text-indigo-700 border-indigo-200/60",
-    pgCount: "15+ PGs",
-    messCount: "11+ Messes",
-  },
-]
+import { fetchCampusHubs, CAMPUS_CONFIGS, type CampusHubWithCounts } from "@/lib/services/campuses"
 
 export function HomeScroller() {
   const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const [hubs, setHubs] = useState<CampusHubWithCounts[]>(() =>
+    CAMPUS_CONFIGS.map((c) => ({ ...c, pgCount: 0, messCount: 0 }))
+  )
+  const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(() => {
+    let isMounted = true
+
+    async function loadCampusData() {
+      try {
+        const res = await fetchCampusHubs()
+        if (isMounted) {
+          setHubs(res.hubs)
+        }
+      } catch (err) {
+        console.warn("Failed to load campus counts:", err)
+      } finally {
+        if (isMounted) {
+          setIsLoading(false)
+        }
+      }
+    }
+
+    void loadCampusData()
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
 
   const scroll = (direction: "left" | "right") => {
     if (!scrollContainerRef.current) return
@@ -150,9 +95,9 @@ export function HomeScroller() {
         className="flex gap-4 overflow-x-auto no-scrollbar scroll-smooth px-4 sm:px-6 lg:px-8 pb-3 pt-1"
         style={{ scrollSnapType: "x mandatory" }}
       >
-        {CAMPUS_HUBS.map((hub, idx) => (
+        {hubs.map((hub) => (
           <div
-            key={idx}
+            key={hub.id}
             className="shrink-0 w-[280px] sm:w-[310px] bg-white rounded-2xl border border-slate-200/90 shadow-xs hover:shadow-md hover:-translate-y-1 transition-all duration-300 p-4 sm:p-5 flex flex-col justify-between"
             style={{ scrollSnapAlign: "start" }}
           >
@@ -164,7 +109,7 @@ export function HomeScroller() {
                 </span>
                 <span className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-500">
                   <MapPin className="w-3 h-3 text-[#1f6fe5]" />
-                  <span>{hub.area}</span>
+                  <span>{hub.locality}</span>
                 </span>
               </div>
 
@@ -185,12 +130,20 @@ export function HomeScroller() {
 
               {/* Availability Counters */}
               <div className="flex items-center gap-2 mt-3.5 mb-4 text-[11px] font-semibold text-slate-600">
-                <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700">
-                  {hub.pgCount}
+                <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 inline-flex items-center min-w-[50px] justify-center">
+                  {isLoading ? (
+                    <span className="inline-block w-8 h-3.5 bg-slate-200 rounded animate-pulse" />
+                  ) : (
+                    `${hub.pgCount} PGs`
+                  )}
                 </span>
                 <span className="text-slate-300">•</span>
-                <span className="px-2 py-0.5 rounded bg-orange-50 text-orange-700">
-                  {hub.messCount}
+                <span className="px-2 py-0.5 rounded bg-orange-50 text-orange-700 inline-flex items-center min-w-[60px] justify-center">
+                  {isLoading ? (
+                    <span className="inline-block w-10 h-3.5 bg-orange-200/60 rounded animate-pulse" />
+                  ) : (
+                    `${hub.messCount} Messes`
+                  )}
                 </span>
               </div>
             </div>
@@ -198,14 +151,14 @@ export function HomeScroller() {
             {/* Quick Action Buttons */}
             <div className="pt-3 border-t border-slate-100 grid grid-cols-2 gap-2">
               <Link
-                href={`/accommodation?search=${encodeURIComponent(hub.area)}`}
+                href={`/accommodation?search=${encodeURIComponent(hub.locality)}`}
                 className="inline-flex items-center justify-center gap-1 py-1.5 px-2 rounded-xl bg-blue-50 hover:bg-[#1f6fe5] text-[#1f6fe5] hover:text-white text-[11.5px] font-bold transition-colors text-center"
               >
                 <span>Find PGs</span>
                 <ArrowUpRight className="w-3 h-3" />
               </Link>
               <Link
-                href={`/mess?search=${encodeURIComponent(hub.area)}`}
+                href={`/mess?search=${encodeURIComponent(hub.locality)}`}
                 className="inline-flex items-center justify-center gap-1 py-1.5 px-2 rounded-xl bg-orange-50 hover:bg-[#ea580c] text-[#ea580c] hover:text-white text-[11.5px] font-bold transition-colors text-center"
               >
                 <span>Find Mess</span>

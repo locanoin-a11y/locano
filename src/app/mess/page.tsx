@@ -64,7 +64,7 @@ function MessListingContent() {
   const searchParams = useSearchParams()
   const { openSearch } = useModal()
 
-  const urlSearch = searchParams.get("search") || ""
+  const urlSearch = searchParams.get("search") || searchParams.get("area") || ""
   const urlDietary = (searchParams.get("dietary") as FilterDietary) || "All"
   const urlService = (searchParams.get("service") as FilterService) || "All"
 
