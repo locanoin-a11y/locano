@@ -108,7 +108,7 @@ function mapRowToMess(row: MessRow): MessListing {
 export async function fetchMesses(
   params: FetchMessesParams = {}
 ): Promise<{ listings: MessListing[]; isFromDatabase: boolean; error?: string }> {
-  const { search, dietary, service } = params
+  const { dietary, service } = params
 
   if (isSupabaseConfigured()) {
     try {
@@ -133,16 +133,8 @@ export async function fetchMesses(
           console.error("Supabase mess query error:", error.message)
           return { listings: [], isFromDatabase: true, error: error.message }
         } else if (data) {
-          let results = data.map(mapRowToMess)
-          if (search) {
-            const q = search.trim().toLowerCase()
-            results = results.filter(
-              (item) =>
-                item.name.toLowerCase().includes(q) ||
-                item.area.toLowerCase().includes(q) ||
-                item.nearestLandmark.toLowerCase().includes(q)
-            )
-          }
+          // Return all published results; fuzzy partitioning is done in the page component
+          const results = data.map(mapRowToMess)
           return { listings: results, isFromDatabase: true }
         }
       }

@@ -1,7 +1,8 @@
 "use client"
 
 import React, { useState, useRef, useEffect, useMemo } from "react"
-import { MapPin, Navigation, X, Loader2, Check, Search } from "lucide-react"
+import { MapPin, Navigation, X, Loader2, Check, Search, Sparkles } from "lucide-react"
+import { rankSuggestions } from "@/lib/search/fuzzy"
 
 export const POPULAR_MANGALURU_AREAS = [
   "Valencia",
@@ -156,31 +157,11 @@ export function LocationSearchInput({
     return Array.from(set)
   }, [customSuggestions])
 
-  // Filter and prioritize suggestions in real-time as user types
+  // Filter and prioritize suggestions with typo tolerance
   const query = value?.trim().toLowerCase() || ""
-  const matchingSuggestions = useMemo(() => {
-    if (!query || query === "all areas") {
-      return POPULAR_MANGALURU_AREAS.slice(0, 15)
-    }
-
-    const starts: string[] = []
-    const contains: string[] = []
-
-    for (const item of allAvailableSuggestions) {
-      const lower = item.toLowerCase()
-      if (lower.startsWith(query)) {
-        starts.push(item)
-      } else if (lower.includes(query)) {
-        contains.push(item)
-      }
-    }
-
-    // Sort alphabetically within each priority bucket
-    starts.sort((a, b) => a.localeCompare(b))
-    contains.sort((a, b) => a.localeCompare(b))
-
-    return [...starts, ...contains].slice(0, 14)
-  }, [query, allAvailableSuggestions])
+  const { suggestions: matchingSuggestions, bestFuzzyCorrection } = useMemo(() => {
+    return rankSuggestions(value, allAvailableSuggestions, 15)
+  }, [value, allAvailableSuggestions])
 
   // Close dropdown on outside click or Escape
   useEffect(() => {
@@ -385,6 +366,23 @@ export function LocationSearchInput({
             </div>
           )}
 
+          {/* Typo Correction Helper Banner */}
+          {bestFuzzyCorrection && bestFuzzyCorrection.toLowerCase() !== query && query.length >= 2 && (
+            <div className="px-4 py-2 bg-blue-50/80 border-b border-blue-100 flex items-center justify-between text-xs text-[#1f6fe5]">
+              <span className="flex items-center gap-1.5 font-medium">
+                <Sparkles className="w-3.5 h-3.5 text-[#1f6fe5] shrink-0" />
+                <span>Did you mean <strong>{bestFuzzyCorrection}</strong>?</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => handleSelect(bestFuzzyCorrection)}
+                className="text-[11px] font-bold underline hover:text-blue-700 cursor-pointer"
+              >
+                Select
+              </button>
+            </div>
+          )}
+
           {/* Option List: Matching Suggestions */}
           <div className="pt-1.5">
             <div className="px-4 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center justify-between">
@@ -423,7 +421,15 @@ export function LocationSearchInput({
                       <span className="truncate">{renderHighlightedText(item)}</span>
                     </span>
 
-                    {isSelected && <Check className="w-4 h-4 text-[#1f6fe5] shrink-0" />}
+                    {isSelected ? (
+                      <Check className="w-4 h-4 text-[#1f6fe5] shrink-0" />
+                    ) : item.toLowerCase() === bestFuzzyCorrection?.toLowerCase() &&
+                      query.length >= 2 &&
+                      query !== item.toLowerCase() ? (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100/70 text-[#1f6fe5] font-semibold shrink-0">
+                        Typo match
+                      </span>
+                    ) : null}
                   </button>
                 )
               })

@@ -42,7 +42,7 @@ function mapRowToListing(row: AccommodationRow): AccommodationListing {
 export async function fetchAccommodations(
   params: FetchAccommodationsParams = {}
 ): Promise<{ listings: AccommodationListing[]; isFromDatabase: boolean; error?: string }> {
-  const { search, gender, type } = params
+  const { gender, type } = params
 
   if (isSupabaseConfigured()) {
     try {
@@ -73,16 +73,8 @@ export async function fetchAccommodations(
           console.error("Supabase accommodation query error:", error.message)
           return { listings: [], isFromDatabase: true, error: error.message }
         } else if (data) {
-          let results = data.map(mapRowToListing)
-          if (search) {
-            const q = search.trim().toLowerCase()
-            results = results.filter(
-              (item) =>
-                (item.name || "").toLowerCase().includes(q) ||
-                (item.area || "").toLowerCase().includes(q) ||
-                (item.nearestLandmark || "").toLowerCase().includes(q)
-            )
-          }
+          // Return all published results; fuzzy partitioning is done in the page component
+          const results = data.map(mapRowToListing)
           return { listings: results, isFromDatabase: true }
         }
       }

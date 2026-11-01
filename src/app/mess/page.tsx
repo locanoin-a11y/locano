@@ -10,6 +10,7 @@ import { CustomDropdown } from "@/components/CustomDropdown"
 import { LocationSearchInput } from "@/components/LocationSearchInput"
 import { ListingCardImage } from "@/components/ListingCardImage"
 import { fetchMesses } from "@/lib/services/mess"
+import { partitionListingsByMatch } from "@/lib/search/fuzzy"
 import type { DietaryType, ServiceType, MessListing } from "@/types/mess"
 import {
   Utensils,
@@ -152,6 +153,19 @@ function MessListingContent() {
     }
     return result
   }, [rawListings, sortBy])
+
+  // Fuzzy partition: exact area matches vs typo-corrected similar matches
+  const { exactMatches, similarMatches, matchedArea, isTypoCorrection } = useMemo(() => {
+    if (!locationQuery) {
+      return { exactMatches: listings, similarMatches: [], matchedArea: null, isTypoCorrection: false }
+    }
+    return partitionListingsByMatch(listings, locationQuery, (item) => ({
+      name: item.name || "",
+      area: item.area || "",
+      landmark: item.nearestLandmark || "",
+      description: "",
+    }))
+  }, [listings, locationQuery])
 
 
   const getServiceLabel = (service: ServiceType) => {
@@ -393,270 +407,182 @@ function MessListingContent() {
           </div>
         )}
 
-        {/* 5. CLEAN 3-COLUMN LISTING GRID */}
-        {!isLoading && !error && listings.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {listings.map((listing, idx) => {
-              const photoFallback =
-                idx % 3 === 0
-                  ? "/mess-thali-deluxe.jpg"
-                  : idx % 3 === 1
-                  ? "/mess-tiffin.jpg"
-                  : "/mess-dining-spread.jpg"
+        {/* LISTINGS GRID — partitioned into exact + similar matches */}
+        {!isLoading && !error && (exactMatches.length > 0 || similarMatches.length > 0) && (() => {
+          const renderCard = (listing: MessListing, idx: number) => {
+            const photoFallback =
+              idx % 3 === 0
+                ? "/mess-thali-deluxe.jpg"
+                : idx % 3 === 1
+                ? "/mess-tiffin.jpg"
+                : "/mess-dining-spread.jpg"
 
-              const realImages = (Array.isArray(listing.images) ? listing.images : []).filter(
-                (img) => Boolean(img) && !img.includes("mess-tiffin") && !img.includes("mess-thali") && !img.includes("default")
-              )
+            const realImages = (Array.isArray(listing.images) ? listing.images : []).filter(
+              (img: string) => Boolean(img) && !img.includes("mess-tiffin") && !img.includes("mess-thali") && !img.includes("default")
+            )
 
-              if (
-                realImages.length === 0 &&
-                listing.sampleImage &&
-                !listing.sampleImage.includes("mess-tiffin") &&
-                !listing.sampleImage.includes("mess-thali") &&
-                !listing.sampleImage.includes("default")
-              ) {
-                realImages.push(listing.sampleImage)
-              }
+            if (
+              realImages.length === 0 &&
+              listing.sampleImage &&
+              !listing.sampleImage.includes("mess-tiffin") &&
+              !listing.sampleImage.includes("mess-thali") &&
+              !listing.sampleImage.includes("default")
+            ) {
+              realImages.push(listing.sampleImage)
+            }
 
-              const coverPhoto =
-                (listing.sampleImage && !listing.sampleImage.includes("mess-tiffin") && !listing.sampleImage.includes("mess-thali") ? listing.sampleImage : null) ||
-                (realImages.length > 0 ? realImages[0] : null)
+            const coverPhoto =
+              (listing.sampleImage && !listing.sampleImage.includes("mess-tiffin") && !listing.sampleImage.includes("mess-thali") ? listing.sampleImage : null) ||
+              (realImages.length > 0 ? realImages[0] : null)
 
-              const imageUrl = coverPhoto || photoFallback
-              const photoCount = realImages.length
+            const imageUrl = coverPhoto || photoFallback
+            const photoCount = realImages.length
+            const isFavorite = favorites.has(listing.id)
 
-              const isFavorite = favorites.has(listing.id)
-
-              return (
-                <ScrollReveal
-                  key={listing.id}
-                  delay={Math.min((idx % 6) * 75, 450)}
-                  distance={16}
-                  duration={420}
-                  className="h-full"
+            return (
+              <ScrollReveal
+                key={listing.id}
+                delay={Math.min((idx % 6) * 75, 450)}
+                distance={16}
+                duration={420}
+                className="h-full"
+              >
+                <Link
+                  href={`/mess/${listing.id}`}
+                  className="group bg-white rounded-2xl border border-slate-200/80 shadow-xs hover:shadow-md hover:-translate-y-0.5 transition-all overflow-hidden flex flex-col justify-between h-full cursor-pointer"
                 >
-                  <Link
-                    href={`/mess/${listing.id}`}
-                    className="group bg-white rounded-2xl border border-slate-200/80 shadow-xs hover:shadow-md hover:-translate-y-0.5 transition-all overflow-hidden flex flex-col justify-between h-full cursor-pointer"
-                  >
-                    {/* CARD IMAGE CONTAINER */}
-                    <div className="relative h-48 sm:h-52 w-full overflow-hidden bg-slate-100">
-                      <ListingCardImage
-                        src={imageUrl}
-                        fallbackSrc={photoFallback}
-                        alt={listing.name}
-                        fill
-                        className="object-cover transition-transform duration-500 ease-out md:group-hover:scale-[1.03]"
-                        sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-                      />
-
-                      {/* Top-left Badges (Matching Reference) */}
-                      <div className="absolute top-3 left-3 z-10 flex items-center gap-1.5 flex-wrap">
-                        <span
-                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold shadow-xs backdrop-blur-md ${
-                            listing.dietary === "Pure Veg"
-                              ? "bg-white/95 text-emerald-700 border border-emerald-100"
-                              : "bg-white/95 text-amber-800 border border-amber-100"
-                          }`}
-                        >
-                          {listing.dietary}
-                        </span>
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-white/95 backdrop-blur-md text-slate-700 text-[11px] font-semibold shadow-xs border border-slate-200/60">
-                          {getServiceLabel(listing.serviceType)}
-                        </span>
-                      </div>
-
-                      {/* Top-right Favorite Heart */}
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.preventDefault()
-                          e.stopPropagation()
-                          toggleFavorite(listing.id)
-                        }}
-                        aria-label="Save to favorites"
-                        className="absolute top-3 right-3 z-10 w-8 h-8 rounded-full bg-black/35 hover:bg-black/55 backdrop-blur-md text-white flex items-center justify-center transition cursor-pointer"
+                  <div className="relative h-48 sm:h-52 w-full overflow-hidden bg-slate-100">
+                    <ListingCardImage
+                      src={imageUrl}
+                      fallbackSrc={photoFallback}
+                      alt={listing.name}
+                      fill
+                      className="object-cover transition-transform duration-500 ease-out md:group-hover:scale-[1.03]"
+                      sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                    />
+                    <div className="absolute top-3 left-3 z-10 flex items-center gap-1.5 flex-wrap">
+                      <span
+                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold shadow-xs backdrop-blur-md ${
+                          listing.dietary === "Pure Veg"
+                            ? "bg-white/95 text-emerald-700 border border-emerald-100"
+                            : "bg-white/95 text-amber-800 border border-amber-100"
+                        }`}
                       >
-                        <Heart
-                          className={`w-4 h-4 transition-colors ${
-                            isFavorite ? "fill-rose-500 text-rose-500" : ""
-                          }`}
-                        />
-                      </button>
-
-                      {/* Bottom-right: Photo count badge */}
-                      <div className="absolute bottom-2.5 right-2.5 z-10">
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-black/60 backdrop-blur-md text-white text-[11px] font-medium">
-                          <Camera className="w-3.5 h-3.5" />
-                          <span>{photoCount} {photoCount === 1 ? "photo" : "photos"}</span>
-                        </span>
+                        {listing.dietary}
+                      </span>
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-white/95 backdrop-blur-md text-slate-700 text-[11px] font-semibold shadow-xs border border-slate-200/60">
+                        {getServiceLabel(listing.serviceType)}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        toggleFavorite(listing.id)
+                      }}
+                      aria-label="Save to favorites"
+                      className="absolute top-3 right-3 z-10 w-8 h-8 rounded-full bg-black/35 hover:bg-black/55 backdrop-blur-md text-white flex items-center justify-center transition cursor-pointer"
+                    >
+                      <Heart className={`w-4 h-4 transition-colors ${isFavorite ? "fill-rose-500 text-rose-500" : ""}`} />
+                    </button>
+                    <div className="absolute bottom-2.5 right-2.5 z-10">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-black/60 backdrop-blur-md text-white text-[11px] font-medium">
+                        <Camera className="w-3.5 h-3.5" />
+                        <span>{photoCount} {photoCount === 1 ? "photo" : "photos"}</span>
+                      </span>
+                    </div>
+                  </div>
+                  <div className="p-4 sm:p-5 flex-1 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-start justify-between gap-2 mb-1.5">
+                        <h3 className="text-[16px] sm:text-[17px] font-bold text-[#10233f] group-hover:text-[#0066FF] transition-colors leading-snug line-clamp-1">
+                          {listing.name}
+                        </h3>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-xs text-slate-500 mb-2">
+                        <MapPin className="w-3.5 h-3.5 text-[#0066FF] shrink-0" />
+                        <span className="font-semibold text-slate-700">{listing.area}</span>
+                        <span className="text-slate-400">· {listing.nearestLandmark}</span>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-1.5 mb-4">
+                        {listing.highlights.slice(0, 2).map((item: string) => (
+                          <span
+                            key={item}
+                            className="inline-flex items-center px-2 py-0.5 rounded-md bg-orange-50/70 border border-orange-200/50 text-[#ea580c] text-[10.5px] font-medium"
+                          >
+                            {item}
+                          </span>
+                        ))}
+                        {listing.highlights.length > 2 && (
+                          <span className="text-[10.5px] font-semibold px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-500">
+                            +{listing.highlights.length - 2}
+                          </span>
+                        )}
                       </div>
                     </div>
-
-                    {/* CARD BODY */}
-                    <div className="p-4 sm:p-5 flex-1 flex flex-col justify-between">
+                    <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
                       <div>
-                        {/* Name & Cuisine Tag */}
-                        <div className="flex items-start justify-between gap-2 mb-1.5">
-                          <h3 className="text-[16px] sm:text-[17px] font-bold text-[#10233f] group-hover:text-[#0066FF] transition-colors leading-snug line-clamp-1">
-                            {listing.name}
-                          </h3>
-                          <span className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 shrink-0">
-                            {listing.cuisine.split("&")[0].trim()}
-                          </span>
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 leading-none mb-1">Starting from</div>
+                        <div className="text-lg sm:text-xl font-extrabold text-[#10233f]">
+                          ₹{listing.monthlyPriceFrom.toLocaleString("en-IN")}
+                          <span className="text-xs font-normal text-slate-500"> /mo</span>
                         </div>
-
-                        {/* Tagline */}
-                        <p className="text-xs text-slate-500 line-clamp-1 mb-2.5">
-                          {listing.tagline}
-                        </p>
-
-                        {/* Location & Landmark */}
-                        <div className="flex items-center gap-1.5 text-xs text-slate-500 mb-2.5">
-                          <MapPin className="w-3.5 h-3.5 text-[#0066FF] shrink-0" />
-                          <span className="font-semibold text-slate-700">{listing.area}</span>
-                          <span className="text-slate-400">· {listing.nearestLandmark}</span>
-                        </div>
-
-                        {/* Weekly Holidays & Operating Schedule */}
-                        <div className="flex flex-wrap items-center gap-2 mb-3">
-                          {listing.weeklyHolidays && listing.weeklyHolidays.length > 0 ? (
-                            <span className="inline-flex items-center gap-1 text-[10.5px] font-semibold text-rose-700 bg-rose-50 px-2.5 py-0.5 rounded-md border border-rose-200/60">
-                              <Calendar className="w-3 h-3 text-rose-500 shrink-0" />
-                              <span>Closed: {listing.weeklyHolidays.join(", ")}</span>
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 text-[10.5px] font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-md border border-emerald-200/60">
-                              <Calendar className="w-3 h-3 text-emerald-600 shrink-0" />
-                              <span>Open All 7 Days</span>
-                            </span>
-                          )}
-
-                          {listing.serviceType && (
-                            <span className="text-[10.5px] font-medium text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md">
-                              {listing.serviceType}
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Meal Timings (All Provided Timings Shown) */}
-                        {(listing.timings?.breakfast || listing.timings?.lunch || listing.timings?.dinner) && (
-                          <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-600 mb-3 bg-slate-50/80 p-2 rounded-xl border border-slate-100">
-                            <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                            {listing.timings.breakfast && (
-                              <span className="inline-flex items-center gap-1">
-                                <span className="font-bold text-slate-700">Breakfast:</span>
-                                <span>{listing.timings.breakfast}</span>
-                              </span>
-                            )}
-                            {listing.timings.breakfast && (listing.timings.lunch || listing.timings.dinner) && (
-                              <span className="text-slate-300">•</span>
-                            )}
-                            {listing.timings.lunch && (
-                              <span className="inline-flex items-center gap-1">
-                                <span className="font-bold text-slate-700">Lunch:</span>
-                                <span>{listing.timings.lunch}</span>
-                              </span>
-                            )}
-                            {listing.timings.lunch && listing.timings.dinner && (
-                              <span className="text-slate-300">•</span>
-                            )}
-                            {listing.timings.dinner && (
-                              <span className="inline-flex items-center gap-1">
-                                <span className="font-bold text-slate-700">Dinner:</span>
-                                <span>{listing.timings.dinner}</span>
-                              </span>
-                            )}
+                        {listing.perMealPriceFrom > 0 && (
+                          <div className="text-[10.5px] text-slate-400 mt-0.5">
+                            Walk-in: ₹{listing.perMealPriceFrom}
                           </div>
                         )}
-
-                        {/* Pricing Model Badge & Sub-details */}
-                        <div className="mb-3.5 p-2.5 rounded-xl bg-slate-50 border border-slate-100">
-                          {listing.pricingType === "meals_per_day" ? (
-                            <div className="space-y-1.5">
-                              <div className="flex items-center justify-between gap-2">
-                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold tracking-wider bg-blue-100/80 text-[#0066FF] border border-blue-200">
-                                  <Utensils className="w-3 h-3" />
-                                  MEALS PER DAY
-                                </span>
-                                <span className="text-[11px] font-bold text-slate-600">
-                                  1 / 2 / 3 meals per day
-                                </span>
-                              </div>
-                              {listing.mealsPerDayPricing?.hasGroupPricing && (
-                                <div className="inline-flex items-center gap-1 text-[10.5px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/60">
-                                  <Users className="w-3 h-3 text-emerald-600" />
-                                  <span>5-Person Group Pricing Available</span>
-                                </div>
-                              )}
-                            </div>
-                          ) : (
-                            <div className="space-y-1.5">
-                              <div className="flex items-center justify-between gap-2">
-                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold tracking-wider bg-purple-100/80 text-purple-700 border border-purple-200">
-                                  <UtensilsCrossed className="w-3 h-3" />
-                                  MEAL COMBINATIONS
-                                </span>
-                                <span className="text-[11px] font-bold text-slate-600">
-                                  Breakfast / Lunch / Dinner combinations
-                                </span>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Highlight Chips */}
-                        <div className="flex flex-wrap items-center gap-1.5 mb-4">
-                          {listing.highlights.slice(0, 2).map((item) => (
-                            <span
-                              key={item}
-                              className="inline-flex items-center px-2 py-0.5 rounded-md bg-orange-50/70 border border-orange-200/50 text-[#ea580c] text-[10.5px] font-medium"
-                            >
-                              {item}
-                            </span>
-                          ))}
-                          {listing.highlights.length > 2 && (
-                            <span className="text-[10.5px] font-semibold px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-500">
-                              +{listing.highlights.length - 2}
-                            </span>
-                          )}
-                        </div>
                       </div>
-
-                      {/* Price & View Details Action */}
-                      <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
-                        <div>
-                          <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 leading-none mb-1">
-                            Starting from
-                          </div>
-                          <div className="text-lg sm:text-xl font-extrabold text-[#10233f]">
-                            ₹{listing.monthlyPriceFrom.toLocaleString("en-IN")}
-                            <span className="text-xs font-normal text-slate-500"> /mo</span>
-                          </div>
-                          {listing.perMealPriceFrom > 0 && (
-                            <div className="text-[10.5px] text-slate-400 mt-0.5">
-                              Walk-in: ₹{listing.perMealPriceFrom}
-                            </div>
-                          )}
-                        </div>
-
-                        <div
-                          className="inline-flex items-center gap-1 px-4 py-2 rounded-xl bg-[#10233f] group-hover:bg-[#0066FF] text-white text-xs font-semibold transition-colors shadow-xs"
-                        >
-                          <span>View Details</span>
-                          <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
-                        </div>
+                      <div className="inline-flex items-center gap-1 px-4 py-2 rounded-xl bg-[#10233f] group-hover:bg-[#0066FF] text-white text-xs font-semibold transition-colors shadow-xs">
+                        <span>View Details</span>
+                        <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
                       </div>
                     </div>
-                  </Link>
-                </ScrollReveal>
-              )
-            })}
-          </div>
-        )}
+                  </div>
+                </Link>
+              </ScrollReveal>
+            )
+          }
 
-        {/* EMPTY STATE */}
-        {!isLoading && !error && listings.length === 0 && (
+          return (
+            <>
+              {exactMatches.length > 0 && (
+                <div className="mb-10">
+                  {locationQuery && (
+                    <div className="flex items-center gap-2 mb-4">
+                      <span className="text-sm font-bold text-[#10233f]">Exact Matches</span>
+                      <span className="text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">{exactMatches.length}</span>
+                    </div>
+                  )}
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {exactMatches.map((listing, idx) => renderCard(listing, idx))}
+                  </div>
+                </div>
+              )}
+              {similarMatches.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-sm font-bold text-[#10233f]">Similar Matches</span>
+                    <span className="text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">{similarMatches.length}</span>
+                  </div>
+                  {isTypoCorrection && matchedArea && (
+                    <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-4 inline-flex items-center gap-1.5">
+                      <Search className="w-3.5 h-3.5" />
+                      Showing results for <strong>{matchedArea}</strong> — did you mean this area?
+                    </p>
+                  )}
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {similarMatches.map((listing, idx) => renderCard(listing, exactMatches.length + idx))}
+                  </div>
+                </div>
+              )}
+            </>
+          )
+        })()}
+
+                {/* EMPTY STATE */}
+        {!isLoading && !error && exactMatches.length === 0 && similarMatches.length === 0 && (
           <div className="p-12 text-center bg-white rounded-3xl border border-slate-200/80 shadow-xs space-y-3 mt-4">
             <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
               <Filter className="w-6 h-6" />

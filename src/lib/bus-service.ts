@@ -1,6 +1,7 @@
 import { buses, type Bus } from "@/data/buses"
 import { stopById, stops, type Stop } from "@/data/stops"
 import { haversineKm, rideBetween, segmentOffset } from "@/lib/geo"
+import { resolveCanonicalArea, damerauLevenshtein } from "@/lib/search/fuzzy"
 
 export type Journey = {
   bus: Bus
@@ -60,6 +61,24 @@ function scoreStop(stop: Stop, query: string) {
     return 74
   }
   if (fields.some((field) => field.includes(query))) return 64
+
+  // Typo tolerance: Check canonical area resolution
+  const resolved = resolveCanonicalArea(query)
+  if (resolved) {
+    const canonicalNorm = normalize(resolved.canonical)
+    if (fields.some((field) => field === canonicalNorm)) return 68
+    if (fields.some((field) => field.includes(canonicalNorm))) return 65
+  }
+
+  // Typo tolerance: Damerau-Levenshtein distance
+  if (query.length >= 3) {
+    for (const field of fields) {
+      const dist = damerauLevenshtein(field, query)
+      if (dist === 1) return 62
+      if (dist === 2 && query.length >= 5) return 55
+    }
+  }
+
   return 0
 }
 
@@ -67,7 +86,7 @@ export function searchStops(query: string, limit = 8) {
   const normalized = normalize(query)
   if (!normalized) return []
   // One letter means "places that start with this", such as v → Valencia, Valachil.
-  const minimumScore = normalized.length === 1 ? 86 : 1
+  const minimumScore = normalized.length === 1 ? 86 : 50
   return stops
     .map((stop) => ({ stop, score: scoreStop(stop, normalized) }))
     .filter((entry) => entry.score >= minimumScore)
@@ -141,7 +160,13 @@ export function getBus(numberOrId: string) {
 }
 
 export function normalizeBusQuery(value: string) {
-  return value.trim().toUpperCase().replace(/\s+/g, "")
+  return value
+    .trim()
+    .toUpperCase()
+    .replace(/^BUS\s*/i, "")
+    .replace(/^NO\.?\s*/i, "")
+    .replace(/\s+/g, "")
+    .replace(/-/g, "")
 }
 
 export function busesWithNumber(query: string) {
@@ -183,9 +208,20 @@ export function matchBuses(query: string) {
   if (!key) return []
   const exact = busesWithNumber(key)
   if (exact.length > 0) return exact
-  return buses
+  const prefixMatches = buses
     .filter((bus) => bus.number.toUpperCase().startsWith(key))
     .sort((a, b) => compareBusNumbers(a.number, b.number))
+  if (prefixMatches.length > 0) return prefixMatches
+
+  // Typo tolerance: Damerau-Levenshtein distance <= 1 for bus numbers
+  if (key.length >= 2) {
+    const fuzzyMatches = buses
+      .filter((bus) => damerauLevenshtein(key, normalizeBusQuery(bus.number)) <= 1)
+      .sort((a, b) => compareBusNumbers(a.number, b.number))
+    if (fuzzyMatches.length > 0) return fuzzyMatches
+  }
+
+  return []
 }
 
 function stopsFromIds(ids: string[]) {

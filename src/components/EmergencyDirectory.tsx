@@ -15,12 +15,11 @@ import {
   MapPin,
   ExternalLink,
   Loader2,
-  Check,
-  Building2,
   Filter,
 } from "lucide-react"
 import { LocationSearchInput, MANGALURU_COORDS, getClosestMangaluruArea } from "@/components/LocationSearchInput"
-import { MANGALURU_HOSPITALS, Hospital as HospitalType, calculateDistanceKm } from "@/data/hospitals"
+import { MANGALURU_HOSPITALS, calculateDistanceKm } from "@/data/hospitals"
+import { isFuzzyMatch, resolveCanonicalArea } from "@/lib/search/fuzzy"
 
 type EmergencyContact = {
   number: string
@@ -203,14 +202,25 @@ export function EmergencyDirectory() {
           if (!areaMatches) return false
         }
 
-        // Search text filter (name, area, facilityType, contact)
+        // Search text filter (name, area, facilityType, contact) with typo tolerance
         if (searchQuery.trim()) {
           const q = searchQuery.toLowerCase().trim()
           const nameMatch = hospital.name.toLowerCase().includes(q)
           const areaMatch = hospital.area.toLowerCase().includes(q)
           const typeMatch = hospital.facilityType.toLowerCase().includes(q)
           const contactMatch = hospital.displayContact.toLowerCase().includes(q)
-          if (!nameMatch && !areaMatch && !typeMatch && !contactMatch) return false
+
+          // Typo tolerance: check fuzzy match against hospital name words, area, and canonical area
+          const resolved = resolveCanonicalArea(q)
+          const nameWords = hospital.name.toLowerCase().split(/\s+/)
+          const fuzzyName =
+            isFuzzyMatch(q, hospital.name).isMatch ||
+            nameWords.some((w) => isFuzzyMatch(q, w).isMatch)
+          const fuzzyArea = resolved
+            ? hospital.area.toLowerCase().includes(resolved.canonical.toLowerCase())
+            : isFuzzyMatch(q, hospital.area).isMatch
+
+          if (!nameMatch && !areaMatch && !typeMatch && !contactMatch && !fuzzyName && !fuzzyArea) return false
         }
 
         // Facility type filter

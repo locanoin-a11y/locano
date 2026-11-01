@@ -10,6 +10,7 @@ import { CustomDropdown } from "@/components/CustomDropdown"
 import { LocationSearchInput } from "@/components/LocationSearchInput"
 import { ListingCardImage } from "@/components/ListingCardImage"
 import { fetchAccommodations } from "@/lib/services/accommodation"
+import { partitionListingsByMatch } from "@/lib/search/fuzzy"
 import type { GenderPreference, AccommodationListing } from "@/types/accommodation"
 import {
   Home,
@@ -189,6 +190,19 @@ function AccommodationContent() {
 
     return result
   }, [rawListings, budgetFilter, sortBy])
+
+  // Fuzzy partition: exact area matches vs typo-corrected similar matches
+  const { exactMatches, similarMatches, matchedArea, isTypoCorrection } = useMemo(() => {
+    if (!locationQuery) {
+      return { exactMatches: listings, similarMatches: [], matchedArea: null, isTypoCorrection: false }
+    }
+    return partitionListingsByMatch(listings, locationQuery, (item) => ({
+      name: item.name || "",
+      area: item.area || "",
+      landmark: item.nearestLandmark || "",
+      description: item.description || "",
+    }))
+  }, [listings, locationQuery])
 
 
   return (
@@ -418,161 +432,195 @@ function AccommodationContent() {
           </div>
         )}
 
-        {/* LISTINGS CARDS */}
-        {!isLoading && !error && listings.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {listings.map((listing, idx) => {
-              // Differentiated realistic room photos
-              const photoFallback =
-                idx % 3 === 0
-                  ? "/pg-room-1.jpg"
-                  : idx % 3 === 1
-                  ? "/pg-room-2.jpg"
-                  : "/pg-room-3.jpg"
+        {/* LISTINGS CARDS — partitioned into exact + similar matches */}
+        {!isLoading && !error && (exactMatches.length > 0 || similarMatches.length > 0) && (() => {
+          const renderCard = (listing: AccommodationListing, idx: number) => {
+            const photoFallback =
+              idx % 3 === 0
+                ? "/pg-room-1.jpg"
+                : idx % 3 === 1
+                ? "/pg-room-2.jpg"
+                : "/pg-room-3.jpg"
 
-              const realImages = (Array.isArray(listing.images) ? listing.images : []).filter(
-                (img) => Boolean(img) && !img.includes("hero-coast") && !img.includes("default")
-              )
+            const realImages = (Array.isArray(listing.images) ? listing.images : []).filter(
+              (img) => Boolean(img) && !img.includes("hero-coast") && !img.includes("default")
+            )
 
-              if (
-                realImages.length === 0 &&
-                listing.sampleImage &&
-                !listing.sampleImage.includes("hero-coast") &&
-                !listing.sampleImage.includes("default")
-              ) {
-                realImages.push(listing.sampleImage)
-              }
+            if (
+              realImages.length === 0 &&
+              listing.sampleImage &&
+              !listing.sampleImage.includes("hero-coast") &&
+              !listing.sampleImage.includes("default")
+            ) {
+              realImages.push(listing.sampleImage)
+            }
 
-              const coverPhoto =
-                (listing.sampleImage && !listing.sampleImage.includes("hero-coast") ? listing.sampleImage : null) ||
-                (realImages.length > 0 ? realImages[0] : null)
+            const coverPhoto =
+              (listing.sampleImage && !listing.sampleImage.includes("hero-coast") ? listing.sampleImage : null) ||
+              (realImages.length > 0 ? realImages[0] : null)
 
-              const imageUrl = coverPhoto || photoFallback
-              const photoCount = realImages.length
+            const imageUrl = coverPhoto || photoFallback
+            const photoCount = realImages.length
+            const isFavorite = favorites.has(listing.id)
 
-              const isFavorite = favorites.has(listing.id)
-
-              return (
-                <ScrollReveal
-                  key={listing.id}
-                  delay={Math.min((idx % 6) * 75, 450)}
-                  distance={16}
-                  duration={420}
-                  className="h-full"
+            return (
+              <ScrollReveal
+                key={listing.id}
+                delay={Math.min((idx % 6) * 75, 450)}
+                distance={16}
+                duration={420}
+                className="h-full"
+              >
+                <Link
+                  href={`/accommodation/${listing.id}`}
+                  className="group bg-white rounded-2xl border border-slate-200/80 shadow-xs hover:shadow-md hover:-translate-y-0.5 transition-all overflow-hidden flex flex-col justify-between h-full cursor-pointer"
                 >
-                  <Link
-                    href={`/accommodation/${listing.id}`}
-                    className="group bg-white rounded-2xl border border-slate-200/80 shadow-xs hover:shadow-md hover:-translate-y-0.5 transition-all overflow-hidden flex flex-col justify-between h-full cursor-pointer"
-                  >
-                    {/* CARD IMAGE CONTAINER */}
-                    <div className="relative h-48 sm:h-52 w-full overflow-hidden bg-slate-100">
-                      <ListingCardImage
-                        src={imageUrl}
-                        fallbackSrc={photoFallback}
-                        alt={listing.name}
-                        fill
-                        className="object-cover transition-transform duration-500 ease-out md:group-hover:scale-[1.03]"
-                        sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                  {/* CARD IMAGE CONTAINER */}
+                  <div className="relative h-48 sm:h-52 w-full overflow-hidden bg-slate-100">
+                    <ListingCardImage
+                      src={imageUrl}
+                      fallbackSrc={photoFallback}
+                      alt={listing.name}
+                      fill
+                      className="object-cover transition-transform duration-500 ease-out md:group-hover:scale-[1.03]"
+                      sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                    />
+
+                    {/* Top-left: Verified Badge */}
+                    <div className="absolute top-3 left-3 z-10">
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-white/95 backdrop-blur-md text-emerald-600 text-[11px] font-bold shadow-xs border border-emerald-100">
+                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+                        <span>Verified</span>
+                      </span>
+                    </div>
+
+                    {/* Top-right: Heart Favorite button */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        toggleFavorite(listing.id)
+                      }}
+                      aria-label="Save to favorites"
+                      className="absolute top-3 right-3 z-10 w-8 h-8 rounded-full bg-black/35 hover:bg-black/55 backdrop-blur-md text-white flex items-center justify-center transition cursor-pointer"
+                    >
+                      <Heart
+                        className={`w-4 h-4 transition-colors ${
+                          isFavorite ? "fill-rose-500 text-rose-500" : ""
+                        }`}
                       />
+                    </button>
 
-                      {/* Top-left: Verified Badge */}
-                      <div className="absolute top-3 left-3 z-10">
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-white/95 backdrop-blur-md text-emerald-600 text-[11px] font-bold shadow-xs border border-emerald-100">
-                          <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
-                          <span>Verified</span>
-                        </span>
-                      </div>
-
-                      {/* Top-right: Heart Favorite button */}
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.preventDefault()
-                          e.stopPropagation()
-                          toggleFavorite(listing.id)
-                        }}
-                        aria-label="Save to favorites"
-                        className="absolute top-3 right-3 z-10 w-8 h-8 rounded-full bg-black/35 hover:bg-black/55 backdrop-blur-md text-white flex items-center justify-center transition cursor-pointer"
-                      >
-                        <Heart
-                          className={`w-4 h-4 transition-colors ${
-                            isFavorite ? "fill-rose-500 text-rose-500" : ""
-                          }`}
-                        />
-                      </button>
-
-                      {/* Bottom-right: Photo count badge */}
-                      <div className="absolute bottom-2.5 right-2.5 z-10">
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-black/60 backdrop-blur-md text-white text-[11px] font-medium">
-                          <Camera className="w-3.5 h-3.5" />
-                          <span>{photoCount} {photoCount === 1 ? "photo" : "photos"}</span>
-                        </span>
-                      </div>
+                    {/* Bottom-right: Photo count badge */}
+                    <div className="absolute bottom-2.5 right-2.5 z-10">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-black/60 backdrop-blur-md text-white text-[11px] font-medium">
+                        <Camera className="w-3.5 h-3.5" />
+                        <span>{photoCount} {photoCount === 1 ? "photo" : "photos"}</span>
+                      </span>
                     </div>
+                  </div>
 
-                    {/* CARD BODY */}
-                    <div className="p-4 sm:p-5 flex-1 flex flex-col justify-between">
-                      <div>
-                        {/* Name & Type Tag */}
-                        <div className="flex items-start justify-between gap-2 mb-1.5">
-                          <h3 className="text-[16px] sm:text-[17px] font-bold text-[#10233f] group-hover:text-[#1f6fe5] transition-colors leading-snug line-clamp-1">
-                            {listing.name}
-                          </h3>
-                          <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-blue-50 text-[#1f6fe5] border border-blue-100 shrink-0">
-                            {listing.gender === "Girls" ? "Girls PG" : listing.gender === "Co-ed" ? "Co-ed PG" : "Boys PG"}
+                  {/* CARD BODY */}
+                  <div className="p-4 sm:p-5 flex-1 flex flex-col justify-between">
+                    <div>
+                      {/* Name & Type Tag */}
+                      <div className="flex items-start justify-between gap-2 mb-1.5">
+                        <h3 className="text-[16px] sm:text-[17px] font-bold text-[#10233f] group-hover:text-[#1f6fe5] transition-colors leading-snug line-clamp-1">
+                          {listing.name}
+                        </h3>
+                        <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-blue-50 text-[#1f6fe5] border border-blue-100 shrink-0">
+                          {listing.gender === "Girls" ? "Girls PG" : listing.gender === "Co-ed" ? "Co-ed PG" : "Boys PG"}
+                        </span>
+                      </div>
+
+                      {/* Location & Landmark / Distance */}
+                      <div className="flex items-center gap-1.5 text-xs text-slate-500 mb-3">
+                        <MapPin className="w-3.5 h-3.5 text-[#1f6fe5] shrink-0" />
+                        <span className="font-semibold text-slate-700">{listing.area}</span>
+                        <span className="text-slate-400">· {listing.nearestLandmark}</span>
+                      </div>
+
+                      {/* Amenities Row */}
+                      <div className="flex flex-wrap items-center gap-1.5 mb-4">
+                        {listing.amenities.slice(0, 3).map((amenity) => (
+                          <span
+                            key={amenity}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-50 border border-slate-200/70 text-slate-600 text-[11px] font-medium"
+                          >
+                            {getAmenityIcon(amenity)}
+                            <span>{getAmenityLabel(amenity)}</span>
                           </span>
-                        </div>
-
-                        {/* Location & Landmark / Distance */}
-                        <div className="flex items-center gap-1.5 text-xs text-slate-500 mb-3">
-                          <MapPin className="w-3.5 h-3.5 text-[#1f6fe5] shrink-0" />
-                          <span className="font-semibold text-slate-700">{listing.area}</span>
-                          <span className="text-slate-400">· {listing.nearestLandmark}</span>
-                        </div>
-
-                        {/* Amenities Row */}
-                        <div className="flex flex-wrap items-center gap-1.5 mb-4">
-                          {listing.amenities.slice(0, 3).map((amenity) => (
-                            <span
-                              key={amenity}
-                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-50 border border-slate-200/70 text-slate-600 text-[11px] font-medium"
-                            >
-                              {getAmenityIcon(amenity)}
-                              <span>{getAmenityLabel(amenity)}</span>
-                            </span>
-                          ))}
-                          {listing.amenities.length > 3 && (
-                            <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-500">
-                              +{listing.amenities.length - 3}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Price & View Details Action */}
-                      <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
-                        <div>
-                          <div className="text-lg sm:text-xl font-extrabold text-[#10233f]">
-                            ₹{listing.monthlyRentFrom.toLocaleString("en-IN")}
-                            <span className="text-xs font-normal text-slate-500">/month</span>
-                          </div>
-                        </div>
-
-                        <div className="inline-flex items-center gap-1 px-4 py-2 rounded-xl bg-[#10233f] group-hover:bg-[#1f6fe5] text-white text-xs font-semibold transition-colors shadow-xs">
-                          <span>View Details</span>
-                          <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
-                        </div>
+                        ))}
+                        {listing.amenities.length > 3 && (
+                          <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-500">
+                            +{listing.amenities.length - 3}
+                          </span>
+                        )}
                       </div>
                     </div>
-                  </Link>
-                </ScrollReveal>
-              )
-            })}
-          </div>
-        )}
+
+                    {/* Price & View Details Action */}
+                    <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+                      <div>
+                        <div className="text-lg sm:text-xl font-extrabold text-[#10233f]">
+                          ₹{listing.monthlyRentFrom.toLocaleString("en-IN")}
+                          <span className="text-xs font-normal text-slate-500">/month</span>
+                        </div>
+                      </div>
+
+                      <div className="inline-flex items-center gap-1 px-4 py-2 rounded-xl bg-[#10233f] group-hover:bg-[#1f6fe5] text-white text-xs font-semibold transition-colors shadow-xs">
+                        <span>View Details</span>
+                        <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
+                      </div>
+                    </div>
+                  </div>
+                </Link>
+              </ScrollReveal>
+            )
+          }
+
+          return (
+            <>
+              {/* EXACT MATCHES */}
+              {exactMatches.length > 0 && (
+                <div className="mb-10">
+                  {locationQuery && (
+                    <div className="flex items-center gap-2 mb-4">
+                      <span className="text-sm font-bold text-[#10233f]">Exact Matches</span>
+                      <span className="text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">{exactMatches.length}</span>
+                    </div>
+                  )}
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {exactMatches.map((listing, idx) => renderCard(listing, idx))}
+                  </div>
+                </div>
+              )}
+
+              {/* SIMILAR MATCHES */}
+              {similarMatches.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-sm font-bold text-[#10233f]">Similar Matches</span>
+                    <span className="text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">{similarMatches.length}</span>
+                  </div>
+                  {isTypoCorrection && matchedArea && (
+                    <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-4 inline-flex items-center gap-1.5">
+                      <Search className="w-3.5 h-3.5" />
+                      Showing results for <strong>{matchedArea}</strong> — did you mean this area?
+                    </p>
+                  )}
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {similarMatches.map((listing, idx) => renderCard(listing, exactMatches.length + idx))}
+                  </div>
+                </div>
+              )}
+            </>
+          )
+        })()}
 
         {/* EMPTY STATE */}
-        {!isLoading && !error && listings.length === 0 && (
+        {!isLoading && !error && exactMatches.length === 0 && similarMatches.length === 0 && (
           <div className="p-12 text-center bg-white rounded-3xl border border-slate-200/80 locano-card space-y-3 mt-4">
             <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
               <Filter className="w-6 h-6" />

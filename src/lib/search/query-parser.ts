@@ -4,6 +4,8 @@
  * and normalizes Mangaluru locations with typo tolerance.
  */
 
+import { resolveCanonicalArea } from "./fuzzy"
+
 export interface ParsedSearchResult {
   category: "accommodation" | "mess" | "transport" | "emergency" | "all"
   targetUrl: string
@@ -116,7 +118,7 @@ const AREA_ALIASES: Record<string, string> = {
 /* ------------------------------------------------------------------ */
 /* Levenshtein Distance for Typo-Tolerant String Matching             */
 /* ------------------------------------------------------------------ */
-function levenshteinDistance(a: string, b: string): number {
+function _levenshteinDistance(a: string, b: string): number {
   const m = a.length
   const n = b.length
   const dp: number[][] = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0))
@@ -141,10 +143,14 @@ function levenshteinDistance(a: string, b: string): number {
  * or fuzzy distance matching.
  */
 export function matchMangaluruArea(rawInput: string): string | null {
+  // Use smart fuzzy resolution with Damerau-Levenshtein distance & Mangaluru aliases
+  const resolved = resolveCanonicalArea(rawInput)
+  if (resolved) return resolved.canonical
+
   const clean = rawInput.trim().toLowerCase()
   if (!clean) return null
 
-  // 1. Direct alias check
+  // 1. Direct alias check fallback
   if (AREA_ALIASES[clean]) {
     return AREA_ALIASES[clean]
   }
@@ -163,19 +169,7 @@ export function matchMangaluruArea(rawInput: string): string | null {
     }
   }
 
-  // 4. Fuzzy Levenshtein match for typos (threshold <= 2)
-  let bestMatch: string | null = null
-  let minDistance = 3
-
-  for (const [alias, canonical] of Object.entries(AREA_ALIASES)) {
-    const dist = levenshteinDistance(clean, alias)
-    if (dist < minDistance) {
-      minDistance = dist
-      bestMatch = canonical
-    }
-  }
-
-  return bestMatch
+  return null
 }
 
 /* ------------------------------------------------------------------ */
