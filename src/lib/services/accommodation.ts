@@ -33,6 +33,8 @@ function mapRowToListing(row: AccommodationRow): AccommodationListing {
     description: row.description,
     sampleImage: row.sample_image || "/hero-coast.png",
     images: row.images,
+    latitude: row.latitude ?? null,
+    longitude: row.longitude ?? null,
     status: row.status,
     isDemo: row.is_demo,
     createdAt: row.created_at,

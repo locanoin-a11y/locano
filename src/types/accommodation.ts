@@ -23,6 +23,9 @@ export interface AccommodationListing {
   description: string
   sampleImage: string
   images?: string[]
+  latitude?: number | null
+  longitude?: number | null
+  distanceKm?: number
   status?: "pending" | "published" | "rejected" | "archived"
   isDemo?: boolean
   createdAt?: string

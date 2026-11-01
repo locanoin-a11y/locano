@@ -99,6 +99,8 @@ function mapRowToMess(row: MessRow): MessListing {
     description: row.description,
     sampleImage: row.sample_image || "/mess-tiffin.jpg",
     images: row.images,
+    latitude: row.latitude ?? null,
+    longitude: row.longitude ?? null,
     status: row.status,
     isDemo: row.is_demo,
     createdAt: row.created_at,

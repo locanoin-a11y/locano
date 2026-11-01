@@ -454,22 +454,110 @@ export function rankSuggestions(
   return { suggestions: result, bestFuzzyCorrection }
 }
 
+export const VERIFIED_AREA_COORDINATES: Record<string, { lat: number; lng: number }> = {
+  Valencia: { lat: 12.8596, lng: 74.8519 },
+  Balmatta: { lat: 12.8708, lng: 74.8458 },
+  Deralakatte: { lat: 12.8166, lng: 74.8988 },
+  Kankanady: { lat: 12.8633, lng: 74.8585 },
+  Hampankatta: { lat: 12.8687, lng: 74.8427 },
+  Kadri: { lat: 12.8858, lng: 74.8560 },
+  Surathkal: { lat: 13.0119, lng: 74.7943 },
+  Bejai: { lat: 12.8872, lng: 74.8422 },
+  Attavar: { lat: 12.8617, lng: 74.8475 },
+  Falnir: { lat: 12.8640, lng: 74.8460 },
+  Pumpwell: { lat: 12.8590, lng: 74.8635 },
+  Bendoor: { lat: 12.8708, lng: 74.8520 },
+  Bendoorwell: { lat: 12.8680, lng: 74.8540 },
+  Kuntikana: { lat: 12.8985, lng: 74.8570 },
+  Kodialbail: { lat: 12.8735, lng: 74.8415 },
+  Lalbagh: { lat: 12.8805, lng: 74.8427 },
+  Kottara: { lat: 12.8940, lng: 74.8430 },
+  "Kottara Chowki": { lat: 12.9000, lng: 74.8390 },
+  Urwa: { lat: 12.8870, lng: 74.8360 },
+  "Urwa Store": { lat: 12.8920, lng: 74.8350 },
+  Adyar: { lat: 12.8680, lng: 74.9120 },
+  Mudippu: { lat: 12.8120, lng: 74.9540 },
+  Padil: { lat: 12.8670, lng: 74.8850 },
+  Ullal: { lat: 12.8250, lng: 74.8540 },
+  Bondel: { lat: 12.9150, lng: 74.8650 },
+  Panambur: { lat: 12.9520, lng: 74.8080 },
+  Jeppu: { lat: 12.8519, lng: 74.8465 },
+  "Jeppu Market": { lat: 12.8530, lng: 74.8450 },
+  Pandeshwar: { lat: 12.8586, lng: 74.8392 },
+  Mannagudda: { lat: 12.8780, lng: 74.8340 },
+  Chilimbi: { lat: 12.8900, lng: 74.8320 },
+  Ladyhill: { lat: 12.8850, lng: 74.8340 },
+  Jyothi: { lat: 12.8710, lng: 74.8460 },
+  Mallikatte: { lat: 12.8750, lng: 74.8570 },
+  Bikarnakatte: { lat: 12.8760, lng: 74.8680 },
+  Derebail: { lat: 12.9050, lng: 74.8480 },
+  Maryhill: { lat: 12.9100, lng: 74.8550 },
+  Kavoor: { lat: 12.9180, lng: 74.8590 },
+  Yeyyadi: { lat: 12.8950, lng: 74.8620 },
+  Shaktinagar: { lat: 12.8880, lng: 74.8780 },
+  Valachil: { lat: 12.8660, lng: 74.9350 },
+  Baikampady: { lat: 12.9600, lng: 74.8150 },
+  Bolar: { lat: 12.8450, lng: 74.8390 },
+  "Car Street": { lat: 12.8690, lng: 74.8380 },
+  "State Bank": { lat: 12.8620, lng: 74.8390 },
+  "Bunts Hostel": { lat: 12.8740, lng: 74.8480 },
+  "PVS Circle": { lat: 12.8750, lng: 74.8450 },
+  Ballalbagh: { lat: 12.8820, lng: 74.8380 },
+  Kotekani: { lat: 12.8910, lng: 74.8390 },
+  Nandigudda: { lat: 12.8540, lng: 74.8490 },
+  Kapikad: { lat: 12.8900, lng: 74.8380 },
+  Ashoknagar: { lat: 12.8920, lng: 74.8370 },
+  Konchady: { lat: 12.9080, lng: 74.8510 },
+}
+
+/**
+ * Genuine Haversine formula calculation: Computes great-circle distance
+ * in kilometers between two latitude/longitude points on Earth.
+ */
+export function haversineDistanceKm(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number
+): number {
+  const toRad = (deg: number) => (deg * Math.PI) / 180
+  const R = 6371 // Earth radius in km
+
+  const dLat = toRad(lat2 - lat1)
+  const dLon = toRad(lon2 - lon1)
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2)
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+  return R * c
+}
+
+export interface NearbyMatch<T> {
+  item: T
+  distanceKm: number
+}
+
 export interface PartitionedSearchResults<T> {
   exactMatches: T[]
   similarMatches: T[]
+  nearbyMatches: NearbyMatch<T>[]
   matchedArea: string | null
+  referenceCoords: { lat: number; lng: number } | null
   isTypoCorrection: boolean
   totalCount: number
 }
 
 /**
- * Partitions listings into "Exact Matches" and "Similar Matches" without duplication.
- * Exact Matches:
- *  - Area matches exactly or normalized search term
- *  - OR item name / landmark exactly contains the query
- * Similar Matches:
- *  - Area or name matches a fuzzy typo or canonical alias
- *  - NEVER duplicates any listing already in exactMatches
+ * Partitions listings into three strictly separate, non-overlapping sections:
+ * 1. Exact Matches: Listings whose registered area matches the query or canonical area.
+ * 2. Similar Matches: Listings matching verified spelling variations or typos (excluding exact matches).
+ * 3. Nearby Matches: Other listings located within 5.0 KM of the searched area's verified reference
+ *    coordinates, sorted by shortest distance first.
+ *
+ * Guarantees:
+ * - A listing is NEVER duplicated across sections.
+ * - Only listings with verified coordinates appear in the nearby section.
+ * - Distance is measured from the searched area's verified reference coordinates.
  */
 export function partitionListingsByMatch<T extends { id: string }>(
   items: T[],
@@ -479,6 +567,8 @@ export function partitionListingsByMatch<T extends { id: string }>(
     area: string
     landmark?: string
     description?: string
+    latitude?: number | null
+    longitude?: number | null
   }
 ): PartitionedSearchResults<T> {
   const clean = normalizeSearchText(searchQuery)
@@ -486,7 +576,9 @@ export function partitionListingsByMatch<T extends { id: string }>(
     return {
       exactMatches: items,
       similarMatches: [],
+      nearbyMatches: [],
       matchedArea: null,
+      referenceCoords: null,
       isTypoCorrection: false,
       totalCount: items.length,
     }
@@ -495,8 +587,15 @@ export function partitionListingsByMatch<T extends { id: string }>(
   const resolved = resolveCanonicalArea(clean)
   const canonicalTarget = resolved?.canonical.toLowerCase() || null
 
+  // Retrieve verified reference coordinates for the searched/resolved area
+  const matchedAreaName = resolved?.canonical || null
+  const referenceCoords = matchedAreaName
+    ? VERIFIED_AREA_COORDINATES[matchedAreaName] || null
+    : null
+
   const exactMatches: T[] = []
   const similarMatches: T[] = []
+  const nearbyMatches: NearbyMatch<T>[] = []
   const seenIds = new Set<string>()
 
   // 1. Find Exact Matches
@@ -557,12 +656,50 @@ export function partitionListingsByMatch<T extends { id: string }>(
     }
   }
 
+  // 3. Find Nearby Matches (Within 5.0 KM radius of reference coordinates)
+  if (referenceCoords) {
+    const scoredNearby: NearbyMatch<T>[] = []
+
+    for (const item of items) {
+      if (seenIds.has(item.id)) continue
+
+      const fields = fieldExtractor(item)
+      const lat = fields.latitude
+      const lng = fields.longitude
+
+      // Only listings with confirmed, verified coordinates are eligible
+      if (typeof lat === "number" && typeof lng === "number" && !isNaN(lat) && !isNaN(lng)) {
+        const distanceKm = haversineDistanceKm(
+          referenceCoords.lat,
+          referenceCoords.lng,
+          lat,
+          lng
+        )
+
+        // Strict 5.0 km boundary
+        if (distanceKm <= 5.0) {
+          scoredNearby.push({
+            item,
+            distanceKm: Math.round(distanceKm * 10) / 10, // Round to 1 decimal place (e.g. 1.8 km)
+          })
+          seenIds.add(item.id)
+        }
+      }
+    }
+
+    // Sort by shortest distance first
+    scoredNearby.sort((a, b) => a.distanceKm - b.distanceKm)
+    nearbyMatches.push(...scoredNearby)
+  }
+
   return {
     exactMatches,
     similarMatches,
-    matchedArea: resolved?.canonical || null,
+    nearbyMatches,
+    matchedArea: matchedAreaName,
+    referenceCoords,
     isTypoCorrection: Boolean(resolved?.isFuzzy || resolved?.isAlias),
-    totalCount: exactMatches.length + similarMatches.length,
+    totalCount: exactMatches.length + similarMatches.length + nearbyMatches.length,
   }
 }
 

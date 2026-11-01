@@ -81,6 +81,8 @@ export interface Database {
           description: string
           sample_image: string | null
           images: string[]
+          latitude: number | null
+          longitude: number | null
           status: ListingStatus
           is_demo: boolean
           created_at: string
@@ -107,6 +109,8 @@ export interface Database {
           description?: string
           sample_image?: string | null
           images?: string[]
+          latitude?: number | null
+          longitude?: number | null
           status?: ListingStatus
           is_demo?: boolean
           created_at?: string
@@ -133,6 +137,8 @@ export interface Database {
           description?: string
           sample_image?: string | null
           images?: string[]
+          latitude?: number | null
+          longitude?: number | null
           status?: ListingStatus
           is_demo?: boolean
           created_at?: string
@@ -168,6 +174,8 @@ export interface Database {
           description: string
           sample_image: string | null
           images: string[]
+          latitude: number | null
+          longitude: number | null
           status: ListingStatus
           is_demo: boolean
           created_at: string
@@ -200,6 +208,8 @@ export interface Database {
           description?: string
           sample_image?: string | null
           images?: string[]
+          latitude?: number | null
+          longitude?: number | null
           status?: ListingStatus
           is_demo?: boolean
           created_at?: string
@@ -232,6 +242,8 @@ export interface Database {
           description?: string
           sample_image?: string | null
           images?: string[]
+          latitude?: number | null
+          longitude?: number | null
           status?: ListingStatus
           is_demo?: boolean
           created_at?: string
@@ -361,6 +373,39 @@ export interface Database {
           key?: string
           window_start?: string
           request_count?: number
+        }
+        Relationships: []
+      }
+      searchable_areas: {
+        Row: {
+          id: string
+          canonical_name: string
+          aliases: string[]
+          latitude: number
+          longitude: number
+          is_active: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id: string
+          canonical_name: string
+          aliases?: string[]
+          latitude: number
+          longitude: number
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          canonical_name?: string
+          aliases?: string[]
+          latitude?: number
+          longitude?: number
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
         }
         Relationships: []
       }

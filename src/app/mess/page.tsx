@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect, useCallback, useMemo, Suspense } from "react"
 import Link from "next/link"
-import Image from "next/image"
 import { useSearchParams } from "next/navigation"
 import { useModal } from "@/context/ModalContext"
 import { ScrollReveal } from "@/components/ScrollReveal"
@@ -15,13 +14,11 @@ import type { DietaryType, ServiceType, MessListing } from "@/types/mess"
 import {
   Utensils,
   Camera,
-  UtensilsCrossed,
   MapPin,
   ArrowRight,
   Filter,
   AlertCircle,
   Search,
-  X,
   RotateCcw,
   ChevronDown,
   Heart,
@@ -29,10 +26,8 @@ import {
   Leaf,
   IndianRupee,
   Home,
-  Clock,
   Map,
-  Users,
-  Calendar,
+  Navigation,
 } from "lucide-react"
 
 type FilterDietary = "All" | DietaryType
@@ -154,16 +149,18 @@ function MessListingContent() {
     return result
   }, [rawListings, sortBy])
 
-  // Fuzzy partition: exact area matches vs typo-corrected similar matches
-  const { exactMatches, similarMatches, matchedArea, isTypoCorrection } = useMemo(() => {
+  // Fuzzy partition: exact area matches, similar typo matches, and nearby messes within 5 km
+  const { exactMatches, similarMatches, nearbyMatches, matchedArea, isTypoCorrection } = useMemo(() => {
     if (!locationQuery) {
-      return { exactMatches: listings, similarMatches: [], matchedArea: null, isTypoCorrection: false }
+      return { exactMatches: listings, similarMatches: [], nearbyMatches: [], matchedArea: null, isTypoCorrection: false }
     }
     return partitionListingsByMatch(listings, locationQuery, (item) => ({
       name: item.name || "",
       area: item.area || "",
       landmark: item.nearestLandmark || "",
-      description: "",
+      description: item.description || "",
+      latitude: item.latitude,
+      longitude: item.longitude,
     }))
   }, [listings, locationQuery])
 
@@ -407,9 +404,9 @@ function MessListingContent() {
           </div>
         )}
 
-        {/* LISTINGS GRID — partitioned into exact + similar matches */}
-        {!isLoading && !error && (exactMatches.length > 0 || similarMatches.length > 0) && (() => {
-          const renderCard = (listing: MessListing, idx: number) => {
+        {/* LISTINGS GRID — partitioned into exact, similar, and nearby 5 km matches */}
+        {!isLoading && !error && (exactMatches.length > 0 || similarMatches.length > 0 || nearbyMatches.length > 0) && (() => {
+          const renderCard = (listing: MessListing, idx: number, distanceBadge?: string) => {
             const photoFallback =
               idx % 3 === 0
                 ? "/mess-thali-deluxe.jpg"
@@ -500,10 +497,20 @@ function MessListingContent() {
                           {listing.name}
                         </h3>
                       </div>
-                      <div className="flex items-center gap-1.5 text-xs text-slate-500 mb-2">
-                        <MapPin className="w-3.5 h-3.5 text-[#0066FF] shrink-0" />
-                        <span className="font-semibold text-slate-700">{listing.area}</span>
-                        <span className="text-slate-400">· {listing.nearestLandmark}</span>
+                      <div className="flex items-center gap-1.5 text-xs text-slate-500 mb-2 flex-wrap">
+                        <div className="flex items-center gap-1.5 truncate">
+                          <MapPin className="w-3.5 h-3.5 text-[#0066FF] shrink-0" />
+                          <span className="font-semibold text-slate-700">{listing.area}</span>
+                          {listing.nearestLandmark && (
+                            <span className="text-slate-400">· {listing.nearestLandmark}</span>
+                          )}
+                        </div>
+                        {distanceBadge && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10.5px] font-bold">
+                            <Navigation className="w-3 h-3 text-emerald-600" />
+                            <span>{distanceBadge}</span>
+                          </span>
+                        )}
                       </div>
                       <div className="flex flex-wrap items-center gap-1.5 mb-4">
                         {listing.highlights.slice(0, 2).map((item: string) => (
@@ -577,12 +584,33 @@ function MessListingContent() {
                   </div>
                 </div>
               )}
+              {/* NEARBY MESSES WITHIN 5 KM */}
+              {nearbyMatches.length > 0 && (
+                <div className="mb-10">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-sm font-bold text-[#10233f]">Nearby Messes Within 5 KM</span>
+                    <span className="text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">{nearbyMatches.length}</span>
+                  </div>
+                  <p className="text-xs text-slate-500 mb-4">
+                    Other food spots within 5 km of <strong>{matchedArea || locationQuery}</strong>, measured from verified reference coordinates and sorted by distance.
+                  </p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {nearbyMatches.map(({ item, distanceKm }, idx) =>
+                      renderCard(
+                        item,
+                        exactMatches.length + similarMatches.length + idx,
+                        `${distanceKm} km from ${matchedArea || locationQuery}`
+                      )
+                    )}
+                  </div>
+                </div>
+              )}
             </>
           )
         })()}
 
-                {/* EMPTY STATE */}
-        {!isLoading && !error && exactMatches.length === 0 && similarMatches.length === 0 && (
+        {/* EMPTY STATE */}
+        {!isLoading && !error && exactMatches.length === 0 && similarMatches.length === 0 && nearbyMatches.length === 0 && (
           <div className="p-12 text-center bg-white rounded-3xl border border-slate-200/80 shadow-xs space-y-3 mt-4">
             <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
               <Filter className="w-6 h-6" />
