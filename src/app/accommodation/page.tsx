@@ -430,19 +430,25 @@ function AccommodationContent() {
                   ? "/pg-room-2.jpg"
                   : "/pg-room-3.jpg"
 
-              const rawImage =
-                (Array.isArray(listing.images) && listing.images.length > 0 ? listing.images[0] : null) ||
-                listing.sampleImage
+              const realImages = (Array.isArray(listing.images) ? listing.images : []).filter(
+                (img) => Boolean(img) && !img.includes("hero-coast") && !img.includes("default")
+              )
 
-              const imageUrl =
-                rawImage &&
-                rawImage !== "/hero-coast.png" &&
-                rawImage !== "/hero-coast.jpg"
-                  ? rawImage
-                  : photoFallback
+              if (
+                realImages.length === 0 &&
+                listing.sampleImage &&
+                !listing.sampleImage.includes("hero-coast") &&
+                !listing.sampleImage.includes("default")
+              ) {
+                realImages.push(listing.sampleImage)
+              }
 
-              // Differentiated photo count matching reference
-              const photoCount = idx === 0 ? 8 : idx === 1 ? 10 : idx === 2 ? 6 : 8 + (idx % 5)
+              const coverPhoto =
+                (listing.sampleImage && !listing.sampleImage.includes("hero-coast") ? listing.sampleImage : null) ||
+                (realImages.length > 0 ? realImages[0] : null)
+
+              const imageUrl = coverPhoto || photoFallback
+              const photoCount = realImages.length
 
               const isFavorite = favorites.has(listing.id)
 
@@ -499,7 +505,7 @@ function AccommodationContent() {
                       <div className="absolute bottom-2.5 right-2.5 z-10">
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-black/60 backdrop-blur-md text-white text-[11px] font-medium">
                           <Camera className="w-3.5 h-3.5" />
-                          <span>{photoCount} photos</span>
+                          <span>{photoCount} {photoCount === 1 ? "photo" : "photos"}</span>
                         </span>
                       </div>
                     </div>

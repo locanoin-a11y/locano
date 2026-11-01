@@ -13,6 +13,7 @@ import { fetchMesses } from "@/lib/services/mess"
 import type { DietaryType, ServiceType, MessListing } from "@/types/mess"
 import {
   Utensils,
+  Camera,
   UtensilsCrossed,
   MapPin,
   ArrowRight,
@@ -403,16 +404,26 @@ function MessListingContent() {
                   ? "/mess-tiffin.jpg"
                   : "/mess-dining-spread.jpg"
 
-              const rawImage =
-                (Array.isArray(listing.images) && listing.images.length > 0 ? listing.images[0] : null) ||
-                listing.sampleImage
+              const realImages = (Array.isArray(listing.images) ? listing.images : []).filter(
+                (img) => Boolean(img) && !img.includes("mess-tiffin") && !img.includes("mess-thali") && !img.includes("default")
+              )
 
-              const imageUrl =
-                rawImage &&
-                rawImage !== "/mess-thali.jpg" &&
-                rawImage !== "/mess-tiffin.jpg"
-                  ? rawImage
-                  : photoFallback
+              if (
+                realImages.length === 0 &&
+                listing.sampleImage &&
+                !listing.sampleImage.includes("mess-tiffin") &&
+                !listing.sampleImage.includes("mess-thali") &&
+                !listing.sampleImage.includes("default")
+              ) {
+                realImages.push(listing.sampleImage)
+              }
+
+              const coverPhoto =
+                (listing.sampleImage && !listing.sampleImage.includes("mess-tiffin") && !listing.sampleImage.includes("mess-thali") ? listing.sampleImage : null) ||
+                (realImages.length > 0 ? realImages[0] : null)
+
+              const imageUrl = coverPhoto || photoFallback
+              const photoCount = realImages.length
 
               const isFavorite = favorites.has(listing.id)
 
@@ -472,6 +483,14 @@ function MessListingContent() {
                           }`}
                         />
                       </button>
+
+                      {/* Bottom-right: Photo count badge */}
+                      <div className="absolute bottom-2.5 right-2.5 z-10">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-black/60 backdrop-blur-md text-white text-[11px] font-medium">
+                          <Camera className="w-3.5 h-3.5" />
+                          <span>{photoCount} {photoCount === 1 ? "photo" : "photos"}</span>
+                        </span>
+                      </div>
                     </div>
 
                     {/* CARD BODY */}

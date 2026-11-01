@@ -1,10 +1,9 @@
 import type { Metadata } from "next"
 import Link from "next/link"
-import Image from "next/image"
 import { notFound } from "next/navigation"
 import { fetchAccommodationById } from "@/lib/services/accommodation"
 import { EnquiryPreviewButton } from "@/components/EnquiryPreviewButton"
-import { ListingCardImage } from "@/components/ListingCardImage"
+import { PhotoGallery } from "@/components/PhotoGallery"
 import {
   ArrowLeft,
   MapPin,
@@ -130,40 +129,13 @@ export default async function AccommodationDetailPage({
             </div>
           </div>
 
-          {/* VISUAL ASSET / LISTING PHOTO BANNER */}
-          {(() => {
-            const rawImage =
-              (Array.isArray(listing.images) && listing.images.length > 0 ? listing.images[0] : null) ||
-              listing.sampleImage ||
-              "/hero-coast.png"
-            const isUploaded = Boolean(
-              rawImage &&
-              (rawImage.startsWith("http") || (!rawImage.includes("hero-coast") && !rawImage.includes("default")))
-            )
-
-            return (
-              <div className="mt-6 relative h-56 sm:h-72 w-full rounded-2xl overflow-hidden bg-slate-100 border border-slate-200">
-                <ListingCardImage
-                  src={rawImage}
-                  fallbackSrc="/hero-coast.png"
-                  alt={listing.name}
-                  fill
-                  className="object-cover"
-                  priority
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-slate-900/60 via-transparent to-transparent flex items-end p-4 sm:p-6">
-                  <div className="text-white">
-                    <div className="text-xs font-semibold uppercase tracking-wider text-blue-200">
-                      {isUploaded ? "Verified Listing Photo" : "Fictional Sample Image"}
-                    </div>
-                    <div className="text-sm sm:text-base font-medium text-slate-100">
-                      {isUploaded ? listing.name : "Representative coastal student residency visual"}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )
-          })()}
+          {/* ADAPTIVE PHOTO GALLERY (0, 1, 2, 3, 4+ photos with Fullscreen Lightbox) */}
+          <PhotoGallery
+            images={listing.images}
+            coverImage={listing.sampleImage}
+            title={listing.name}
+            type="accommodation"
+          />
         </div>
 
         {/* DETAILS GRID */}
