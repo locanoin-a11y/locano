@@ -1,7 +1,8 @@
 "use client"
 
-import React, { useState, useEffect } from "react"
-import { AlertCircle, X, Send, CheckCircle2, Loader2, Phone, Mail, User } from "lucide-react"
+import React, { useState, useEffect, useRef, useCallback } from "react"
+import { useRouter } from "next/navigation"
+import { AlertCircle, X, Send, CheckCircle2, Loader2 } from "lucide-react"
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase/client"
 
 interface EnquiryPreviewButtonProps {
@@ -22,111 +23,255 @@ export function EnquiryPreviewButton({
   const [isOpen, setIsOpen] = useState(false)
   const [modalState, setModalState] = useState<ModalState>("idle")
   const [errorMsg, setErrorMsg] = useState("")
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [hasSubmitted, setHasSubmitted] = useState(false)
+  const [contactInfo, setContactInfo] = useState("")
 
-  // Form Fields
-  const [studentName, setStudentName] = useState("")
-  const [studentPhone, setStudentPhone] = useState("")
-  const [studentEmail, setStudentEmail] = useState("")
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
-
+  const router = useRouter()
+  const resumeAttemptedRef = useRef(false)
   const isMess = category === "mess"
   const defaultButtonLabel = isMess ? "Register Interest" : "I'm Interested"
 
-  // Prefill if student is already logged in
-  useEffect(() => {
-    if (isOpen) {
-      const supabase = getSupabaseBrowserClient()
-      if (supabase) {
-        supabase.auth.getUser().then(async ({ data: { user } }) => {
-          if (user) {
-            setCurrentUserId(user.id)
-            setStudentEmail(user.email || "")
-            try {
-              const { data: profile } = await supabase
-                .from("profiles")
-                .select("full_name, phone")
-                .eq("id", user.id)
-                .single()
-
-              if (profile) {
-                if (profile.full_name && !studentName) setStudentName(profile.full_name)
-                if (profile.phone && !studentPhone) setStudentPhone(profile.phone)
-              }
-            } catch {
-              // Ignore profile fetch error if offline or new
-            }
-          }
-        })
-      }
-    }
-  }, [isOpen, studentName, studentPhone])
-
-  async function handleSubmitEnquiry(e: React.FormEvent) {
-    e.preventDefault()
-    setModalState("submitting")
+  // Core submission executor using authenticated user's account details
+  const executeSubmission = useCallback(
+    async (user: {
+      id: string
+      email?: string | null
+      user_metadata?: Record<string, unknown>
+    }) => {
+    setIsSubmitting(true)
     setErrorMsg("")
 
-    const cleanPhone = studentPhone.trim()
-    const cleanEmail = studentEmail.trim().toLowerCase()
-    const cleanName = studentName.trim()
+    try {
+      if (!isSupabaseConfigured()) {
+        await new Promise((r) => setTimeout(r, 600))
+        setContactInfo(user.email || "your registered contact")
+        setHasSubmitted(true)
+        setModalState("success")
+        setIsOpen(true)
+        return
+      }
 
-    if (!cleanPhone || cleanPhone.replace(/\D/g, "").length < 10) {
-      setErrorMsg("Please enter a valid 10-digit mobile number so the team can reach you.")
-      setModalState("error")
-      return
-    }
+      const supabase = getSupabaseBrowserClient()
+      if (!supabase) {
+        setContactInfo(user.email || "your registered contact")
+        setHasSubmitted(true)
+        setModalState("success")
+        setIsOpen(true)
+        return
+      }
 
-    if (!cleanEmail || !cleanEmail.includes("@")) {
-      setErrorMsg("Please enter a valid email address.")
-      setModalState("error")
-      return
-    }
+      let studentName = ((user.user_metadata?.full_name as string) || "").trim()
+      let studentPhone = ((user.user_metadata?.phone as string) || "").trim()
+      const studentEmail = (user.email || "").trim().toLowerCase()
 
-    if (!isSupabaseConfigured()) {
-      await new Promise((r) => setTimeout(r, 600))
+      try {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("full_name, phone")
+          .eq("id", user.id)
+          .single()
+
+        if (profile) {
+          if (profile.full_name && !studentName) studentName = String(profile.full_name).trim()
+          if (profile.phone && !studentPhone) studentPhone = String(profile.phone).trim()
+        }
+      } catch {
+        // Silently continue with metadata if profile lookup fails
+      }
+
+      const cleanName = studentName
+      const cleanPhone = studentPhone
+      const cleanEmail = studentEmail
+
+      const contactSnippet =
+        [cleanPhone || null, cleanEmail || null].filter(Boolean).join(", ") || "No contact info provided"
+
+      const { error } = await supabase.from("admin_notifications").insert({
+        notification_type: "enquiry_created",
+        user_id: user.id,
+        listing_id: listingId ?? null,
+        title: isMess ? `Mess Enquiry — ${listingName}` : `Accommodation Enquiry — ${listingName}`,
+        message: `${cleanName || "A student"} (${contactSnippet}) expressed interest in "${listingName}" (${category}).`,
+        metadata: {
+          student_name: cleanName,
+          student_phone: cleanPhone,
+          student_email: cleanEmail,
+          phone: cleanPhone,
+          email: cleanEmail,
+          listing_name: listingName,
+          listing_id: listingId ?? null,
+          category,
+        },
+      })
+
+      if (error) {
+        console.error("Enquiry notification error:", error.message)
+        setErrorMsg(error.message || "Something went wrong. Please try again.")
+        setModalState("error")
+        setIsOpen(true)
+        return
+      }
+
+      setContactInfo(cleanPhone || cleanEmail || "your registered account")
+      setHasSubmitted(true)
       setModalState("success")
+      setIsOpen(true)
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Something went wrong. Please try again."
+      console.error("Enquiry submission unexpected error:", err)
+      setErrorMsg(message)
+      setModalState("error")
+      setIsOpen(true)
+    } finally {
+      setIsSubmitting(false)
+    }
+  }, [category, isMess, listingId, listingName])
+
+  // Automatic resumption on mount if returning from login with a pending enquiry
+  useEffect(() => {
+    if (typeof window === "undefined" || resumeAttemptedRef.current) return
+
+    const checkPendingEnquiry = async () => {
+      let stored: string | null = null
+      try {
+        stored = sessionStorage.getItem("locano_pending_enquiry")
+      } catch {
+        return
+      }
+
+      if (!stored) return
+
+      try {
+        const pending = JSON.parse(stored)
+        const matchesListing =
+          pending?.action === "enquire" &&
+          (pending.listingId === (listingId ?? "") || !pending.listingId)
+
+        // Expire after 30 minutes
+        const isFresh =
+          typeof pending.createdAt === "number" &&
+          Date.now() - pending.createdAt < 30 * 60 * 1000
+
+        if (matchesListing && isFresh) {
+          // Immediately mark attempted and remove from sessionStorage to prevent duplicate submission
+          resumeAttemptedRef.current = true
+          sessionStorage.removeItem("locano_pending_enquiry")
+
+          if (!isSupabaseConfigured()) return
+
+          const supabase = getSupabaseBrowserClient()
+          if (!supabase) return
+
+          const {
+            data: { user },
+          } = await supabase.auth.getUser()
+
+          if (user) {
+            // User is authenticated! Automatically submit the enquiry
+            await executeSubmission(user)
+          }
+        }
+      } catch (err) {
+        console.error("Error resuming pending enquiry:", err)
+        try {
+          sessionStorage.removeItem("locano_pending_enquiry")
+        } catch {
+          // Ignore
+        }
+      }
+    }
+
+    checkPendingEnquiry()
+  }, [executeSubmission, listingId])
+
+  // Handle user clicking "Enquire" / "I'm Interested" / "Register Interest"
+  const handleEnquireClick = async () => {
+    // Prevent accidental duplicate submission
+    if (isSubmitting) return
+
+    // If already submitted in this session, re-show confirmation
+    if (hasSubmitted) {
+      setModalState("success")
+      setIsOpen(true)
+      return
+    }
+
+    setIsSubmitting(true)
+    setErrorMsg("")
+
+    // Demo/offline mode without Supabase
+    if (!isSupabaseConfigured()) {
+      await new Promise((r) => setTimeout(r, 500))
+      setContactInfo("demo@locano.in")
+      setHasSubmitted(true)
+      setModalState("success")
+      setIsOpen(true)
+      setIsSubmitting(false)
       return
     }
 
     const supabase = getSupabaseBrowserClient()
     if (!supabase) {
+      setContactInfo("your registered contact")
+      setHasSubmitted(true)
       setModalState("success")
+      setIsOpen(true)
+      setIsSubmitting(false)
       return
     }
 
-    const { error } = await supabase.from("admin_notifications").insert({
-      notification_type: "enquiry_created",
-      user_id: currentUserId,
-      listing_id: listingId ?? null,
-      title: isMess ? `Mess Enquiry — ${listingName}` : `Accommodation Enquiry — ${listingName}`,
-      message: `${cleanName || "A student"} (${cleanPhone}, ${cleanEmail}) expressed interest in "${listingName}" (${category}).`,
-      metadata: {
-        student_name: cleanName,
-        student_phone: cleanPhone,
-        student_email: cleanEmail,
-        phone: cleanPhone,
-        email: cleanEmail,
-        listing_name: listingName,
-        listing_id: listingId ?? null,
-        category,
-      },
-    })
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
 
-    if (error) {
-      console.error("Enquiry notification error:", error.message)
-      setErrorMsg(error.message || "Something went wrong. Please try again.")
+      if (!user) {
+        // User is not authenticated -> redirect to sign in page
+        // Preserve original listing ID, listing type, return URL, and action
+        if (typeof window !== "undefined") {
+          const returnUrl = window.location.pathname + window.location.search
+          try {
+            sessionStorage.setItem(
+              "locano_pending_enquiry",
+              JSON.stringify({
+                action: "enquire",
+                listingId: listingId ?? "",
+                listingName,
+                category,
+                returnUrl,
+                createdAt: Date.now(),
+              })
+            )
+          } catch (e) {
+            console.error("Failed to save pending enquiry to sessionStorage", e)
+          }
+
+          const loginUrl = `/login?next=${encodeURIComponent(returnUrl)}&action=enquire&listingId=${encodeURIComponent(listingId || "")}&category=${category}`
+          router.push(loginUrl)
+        }
+        return
+      }
+
+      // User is authenticated -> submit directly
+      await executeSubmission(user)
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Something went wrong. Please try again."
+      console.error("Error during enquiry auth check:", err)
+      setErrorMsg(message)
       setModalState("error")
-      return
+      setIsOpen(true)
+      setIsSubmitting(false)
     }
-
-    setModalState("success")
   }
 
   function handleClose() {
     setIsOpen(false)
     setTimeout(() => {
-      setModalState("idle")
-      setErrorMsg("")
+      if (modalState === "error") {
+        setModalState("idle")
+        setErrorMsg("")
+      }
     }, 300)
   }
 
@@ -134,11 +279,21 @@ export function EnquiryPreviewButton({
     <>
       <button
         type="button"
-        onClick={() => setIsOpen(true)}
-        className="w-full py-3.5 px-6 rounded-full bg-[#1f6fe5] hover:bg-blue-600 text-white font-bold text-sm transition-all shadow-md shadow-blue-500/20 flex items-center justify-center gap-2 group cursor-pointer"
+        disabled={isSubmitting}
+        onClick={handleEnquireClick}
+        className="w-full py-3.5 px-6 rounded-full bg-[#1f6fe5] hover:bg-blue-600 text-white font-bold text-sm transition-all shadow-md shadow-blue-500/20 flex items-center justify-center gap-2 group cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
       >
-        <Send className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
-        <span>{buttonText || defaultButtonLabel}</span>
+        {isSubmitting ? (
+          <>
+            <Loader2 className="w-4 h-4 animate-spin" />
+            <span>Submitting Enquiry…</span>
+          </>
+        ) : (
+          <>
+            <Send className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+            <span>{buttonText || defaultButtonLabel}</span>
+          </>
+        )}
       </button>
 
       {isOpen && (
@@ -158,7 +313,7 @@ export function EnquiryPreviewButton({
             )}
 
             {/* SUCCESS STATE */}
-            {modalState === "success" ? (
+            {modalState === "success" && (
               <div className="text-center py-4 space-y-4">
                 <div className="flex justify-center">
                   <div className="w-14 h-14 rounded-full bg-emerald-50 border border-emerald-200 flex items-center justify-center">
@@ -170,8 +325,14 @@ export function EnquiryPreviewButton({
                   <p className="text-sm text-slate-500 mt-2 leading-relaxed">
                     We&apos;ve registered your interest for{" "}
                     <span className="font-semibold text-slate-700">{listingName}</span>.
-                    The team will contact you at{" "}
-                    <span className="font-semibold text-slate-700">{studentPhone}</span> shortly.
+                    {contactInfo ? (
+                      <>
+                        {" "}The team will contact you at{" "}
+                        <span className="font-semibold text-slate-700">{contactInfo}</span> shortly.
+                      </>
+                    ) : (
+                      <> The team will contact you shortly.</>
+                    )}
                   </p>
                 </div>
                 <button
@@ -182,108 +343,30 @@ export function EnquiryPreviewButton({
                   Close
                 </button>
               </div>
-            ) : (
-              <form onSubmit={handleSubmitEnquiry}>
-                <div className="mb-4">
-                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-800 border border-blue-200/60 mb-2">
-                    <Send className="w-3.5 h-3.5 text-blue-500" />
-                    <span>{isMess ? "MESS ENQUIRY" : "ACCOMMODATION ENQUIRY"}</span>
+            )}
+
+            {/* ERROR STATE */}
+            {modalState === "error" && (
+              <div className="text-center py-4 space-y-4">
+                <div className="flex justify-center">
+                  <div className="w-14 h-14 rounded-full bg-red-50 border border-red-200 flex items-center justify-center">
+                    <AlertCircle className="w-7 h-7 text-red-600" />
                   </div>
-                  <h3 className="text-xl font-bold text-[#10233f]">Register Your Interest</h3>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    {isMess ? "Mess: " : "Property: "}
-                    <span className="font-semibold text-slate-700">{listingName}</span>
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-[#10233f]">Submission Failed</h3>
+                  <p className="text-sm text-red-600 mt-2 leading-relaxed">
+                    {errorMsg || "Something went wrong. Please try again."}
                   </p>
                 </div>
-
-                <div className="space-y-3 my-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      Your Full Name
-                    </label>
-                    <div className="relative">
-                      <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                      <input
-                        type="text"
-                        required
-                        value={studentName}
-                        onChange={(e) => setStudentName(e.target.value)}
-                        placeholder="e.g. Rahul Sharma"
-                        className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      Mobile Number (Calls / WhatsApp) *
-                    </label>
-                    <div className="relative">
-                      <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                      <input
-                        type="tel"
-                        required
-                        value={studentPhone}
-                        onChange={(e) => setStudentPhone(e.target.value)}
-                        placeholder="+91 98451 23456"
-                        className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      Email Address *
-                    </label>
-                    <div className="relative">
-                      <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                      <input
-                        type="email"
-                        required
-                        value={studentEmail}
-                        onChange={(e) => setStudentEmail(e.target.value)}
-                        placeholder="rahul.sharma@example.com"
-                        className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {errorMsg && (
-                  <div className="mb-3 p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 flex items-center gap-2">
-                    <AlertCircle className="w-4 h-4 shrink-0" />
-                    <span>{errorMsg}</span>
-                  </div>
-                )}
-
-                <div className="mt-5 space-y-2">
-                  <button
-                    type="submit"
-                    disabled={modalState === "submitting"}
-                    className="w-full py-3 rounded-full bg-[#1f6fe5] text-white text-sm font-bold hover:bg-blue-600 transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-md shadow-blue-500/20"
-                  >
-                    {modalState === "submitting" ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        <span>Sending Enquiry…</span>
-                      </>
-                    ) : (
-                      <>
-                        <Send className="w-4 h-4" />
-                        <span>Send Enquiry to Property Team</span>
-                      </>
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleClose}
-                    disabled={modalState === "submitting"}
-                    className="w-full py-2.5 rounded-full bg-slate-100 text-slate-600 text-xs font-semibold hover:bg-slate-200 transition-colors disabled:opacity-50"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </form>
+                <button
+                  type="button"
+                  onClick={handleClose}
+                  className="w-full py-2.5 rounded-full bg-[#10233f] text-white text-xs font-semibold hover:bg-slate-800 transition-colors"
+                >
+                  Close
+                </button>
+              </div>
             )}
           </div>
         </div>

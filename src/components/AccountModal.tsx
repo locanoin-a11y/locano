@@ -39,6 +39,21 @@ interface AccountCardProps {
   onDone?: () => void
 }
 
+function getPostAuthRedirect(): string {
+  if (typeof window !== "undefined") {
+    try {
+      const params = new URLSearchParams(window.location.search)
+      const target = params.get("next") || params.get("redirect")
+      if (target && target.startsWith("/") && !target.startsWith("//")) {
+        return target
+      }
+    } catch {
+      // Fallback to home
+    }
+  }
+  return "/"
+}
+
 export function AccountCard({
   initialMode = "signin",
   initialRole = "student",
@@ -233,10 +248,10 @@ export function AccountCard({
             // Immediately align UI with the authoritative database role
             setRole(res.user.role)
           }
-          // Refresh and redirect to home page after successful sign in
+          // Refresh and redirect to target page or home page after successful sign in
           setTimeout(() => {
             if (onDone) onDone()
-            window.location.href = "/"
+            window.location.href = getPostAuthRedirect()
           }, 800)
         }
         if (!res.success && !res.needsConfig) {
@@ -542,7 +557,7 @@ export function AccountCard({
               type="button"
               onClick={() => {
                 if (onDone) onDone()
-                window.location.href = "/"
+                window.location.href = getPostAuthRedirect()
               }}
               className="w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-full bg-[#10233f] text-white text-xs font-bold hover:bg-[#1f6fe5] transition-colors cursor-pointer"
             >
