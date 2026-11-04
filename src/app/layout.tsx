@@ -94,7 +94,41 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${outfit.variable} ${fraunces.variable}`}>
       <body className="min-h-screen flex flex-col bg-white text-[#10233f] font-sans antialiased">
-        {/* Google Analytics 4 — G-WR6VYTKB4N */}
+        {/* ── 1. Google Consent Mode v2 defaults ───────────────────────────
+            Must execute before CookieYes and GA4 so that default consent
+            is established before any tracking tags load. wait_for_update: 500
+            ensures GA4 waits up to 500ms for CookieYes to update consent
+            from previously saved user preferences before sending pings.
+        ──────────────────────────────────────────────────────────────────── */}
+        <Script id="gcm-defaults" strategy="beforeInteractive">
+          {`
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('consent', 'default', {
+              analytics_storage:    'denied',
+              ad_storage:           'denied',
+              ad_user_data:         'denied',
+              ad_personalization:   'denied',
+              wait_for_update:      500
+            });
+          `}
+        </Script>
+
+        {/* ── 2. CookieYes consent banner ──────────────────────────────────
+            Loads as early as possible (beforeInteractive) to render the banner
+            and restore previously saved consent from cookies. Automatically
+            issues gtag('consent', 'update', {...}) to Google Consent Mode.
+        ──────────────────────────────────────────────────────────────────── */}
+        <Script
+          id="cookieyes"
+          src="https://cdn-cookieyes.com/client_data/f1b4ce1c022ea31868bad288/script.js"
+          strategy="beforeInteractive"
+        />
+
+        {/* ── 3. Google Analytics 4 (G-WR6VYTKB4N) ──────────────────────────
+            Loads afterInteractive (post-hydration) to avoid blocking rendering.
+            Inherits the consent defaults and any updates dispatched by CookieYes.
+        ──────────────────────────────────────────────────────────────────── */}
         <Script
           src="https://www.googletagmanager.com/gtag/js?id=G-WR6VYTKB4N"
           strategy="afterInteractive"
