@@ -1,5 +1,6 @@
 import type { Metadata } from "next"
 import { Outfit, Fraunces } from "next/font/google"
+import Script from "next/script"
 import "./globals.css"
 import { ModalProvider } from "@/context/ModalContext"
 import { Navbar } from "@/components/Navbar"
@@ -93,6 +94,19 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${outfit.variable} ${fraunces.variable}`}>
       <body className="min-h-screen flex flex-col bg-white text-[#10233f] font-sans antialiased">
+        {/* Google Analytics 4 — G-WR6VYTKB4N */}
+        <Script
+          src="https://www.googletagmanager.com/gtag/js?id=G-WR6VYTKB4N"
+          strategy="afterInteractive"
+        />
+        <Script id="ga4-init" strategy="afterInteractive">
+          {`
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+            gtag('config', 'G-WR6VYTKB4N');
+          `}
+        </Script>
         <OrganizationJsonLd />
         <WebsiteJsonLd />
         <ModalProvider>
